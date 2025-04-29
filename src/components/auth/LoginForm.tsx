@@ -16,6 +16,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react"; // Import Loader2 for loading state
+import Link from 'next/link'; // Import Link for navigation
 // import { signInWithEmailAndPassword } from "firebase/auth"; // Import Firebase Auth function
 // import { auth } from "@/lib/firebase/firebase"; // Import Firebase auth instance (adjust path if needed)
 
@@ -134,7 +135,9 @@ export function LoginForm() {
           )}
         </Button>
          <div className="text-center text-sm mt-4">
-            <a href="#" className="text-primary hover:underline">Esqueceu sua senha?</a>
+            <Link href="/forgot-password" className="text-primary hover:underline">
+                Esqueceu sua senha?
+            </Link>
          </div>
       </form>
     </Form>
