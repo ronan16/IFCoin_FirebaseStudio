@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { Badge } from "@/components/ui/badge"; // Import Badge component
 import { Award, Coins, History, Repeat, ShoppingBag, Users, Star } from "lucide-react";
 import Image from 'next/image';
 
