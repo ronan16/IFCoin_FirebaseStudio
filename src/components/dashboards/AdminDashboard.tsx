@@ -17,7 +17,10 @@ import * as z from "zod";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Switch } from '@/components/ui/switch';
-import { DatePicker } from '@/components/ui/date-picker'; // Assuming DatePicker component exists
+import { DatePicker } from '@/components/ui/date-picker';
+import { Label } from '@/components/ui/label';
+import { Separator } from '@/components/ui/separator'; // Correct Separator import
+
 
 // Mock Data - Replace with actual data fetching
 const registeredUsers = [
@@ -270,14 +273,14 @@ export function AdminDashboard() {
                              <div className="flex items-center justify-between rounded-lg border p-3 shadow-sm">
                                 <div className="space-y-0.5">
                                     <Label>Habilitar Trocas entre Alunos</Label>
-                                    <Description className="text-xs text-muted-foreground">Permitir que alunos proponham e aceitem trocas.</Description>
+                                    <p className="text-xs text-muted-foreground">Permitir que alunos proponham e aceitem trocas.</p> {/* Use p tag for description */}
                                 </div>
                                 <Switch /> {/* Add state management */}
                             </div>
                              <div className="flex items-center justify-between rounded-lg border p-3 shadow-sm">
                                 <div className="space-y-0.5">
                                     <Label>Limite Mensal de Pacotes</Label>
-                                     <Description className="text-xs text-muted-foreground">Quantos pacotes cada aluno pode comprar por mês.</Description>
+                                     <p className="text-xs text-muted-foreground">Quantos pacotes cada aluno pode comprar por mês.</p> {/* Use p tag for description */}
                                 </div>
                                 <Input type="number" className="w-20" defaultValue={1} /> {/* Add state management */}
                             </div>
@@ -333,20 +336,3 @@ export function AdminDashboard() {
         </div>
     );
 }
-
-// Helper component (example) - real app might import Label and Description from ui/form
-const Label = ({ children, ...props }: React.LabelHTMLAttributes<HTMLLabelElement>) => <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70" {...props}>{children}</label>;
-const Description = ({ children, ...props }: React.HTMLAttributes<HTMLParagraphElement>) => <p className="text-[0.8rem] text-muted-foreground" {...props}>{children}</p>;
-
-// Basic DatePicker Placeholder - Replace with actual implementation
-function DatePicker({ date, setDate }: { date?: Date, setDate: (date?: Date) => void }) {
-    return (
-        <Input
-            type="date"
-            value={date ? date.toISOString().split('T')[0] : ''}
-            onChange={(e) => setDate(e.target.value ? new Date(e.target.value + 'T00:00:00') : undefined)} // Ensure time is handled correctly
-            className="w-full"
-        />
-    );
-}
-
