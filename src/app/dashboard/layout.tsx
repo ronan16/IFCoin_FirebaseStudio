@@ -47,12 +47,12 @@ import { cn } from "@/lib/utils";
 
 // Mock user data - replace with actual user data fetching logic
 const userData = {
-  name: "João Aluno",
-  email: "joao.aluno@ifpr.edu.br",
-  role: "student", // or 'teacher', 'admin'
-  avatarUrl: "https://picsum.photos/id/237/40/40", // Placeholder avatar
-  initials: "JA",
-  coins: 150, // Example coin balance
+  name: "Admin User",
+  email: "admin@ifpr.edu.br",
+  role: "admin", // or 'teacher', 'admin'
+  avatarUrl: "https://picsum.photos/id/42/40/40", // Placeholder avatar
+  initials: "AU",
+  coins: 9999, // Example coin balance
 };
 
 type NavItem = {

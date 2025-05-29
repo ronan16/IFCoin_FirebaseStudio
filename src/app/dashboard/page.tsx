@@ -12,7 +12,7 @@ async function getUserRole(): Promise<'student' | 'teacher' | 'staff' | 'admin' 
   // Simulate API call
   await new Promise(resolve => setTimeout(resolve, 500));
   // In a real app, you'd fetch this based on the logged-in user
-  return 'student'; // <-- Change this to 'teacher' or 'admin' to test different dashboards
+  return 'admin'; // <-- Change this to 'teacher' or 'admin' to test different dashboards
 }
 
 export default function DashboardPage() {
