@@ -72,27 +72,30 @@ export default function DashboardLayout({
 }) {
   const pathname = usePathname();
 
-  let currentUserRole: 'student' | 'teacher' | 'staff' | 'admin' = 'student'; // Default to student
+  // Determine user role based on the current path for simulation
+  // In a real app, this would come from an auth context/session
+  let currentUserRole: 'student' | 'teacher' | 'staff' | 'admin' = 'student'; // Default
   let currentUserName = "Aluno Padrão";
   let currentUserEmail = "aluno@ifpr.edu.br";
   let currentUserInitials = "AP";
   let currentUserAvatar = "https://picsum.photos/seed/student-avatar/40/40";
   let currentUserCoins = 150;
 
-  if (pathname === '/dashboard/admin') {
+
+  if (pathname.startsWith('/dashboard/admin')) {
     currentUserRole = 'admin';
     currentUserName = "Admin User";
-    currentUserEmail = "admin@admin.com"; // Matching login form
+    currentUserEmail = "admin@admin.com";
     currentUserInitials = "AU";
     currentUserAvatar = "https://picsum.photos/seed/admin-avatar/40/40";
     currentUserCoins = 9999;
-  } else if (pathname === '/dashboard/teacher') {
+  } else if (pathname.startsWith('/dashboard/teacher')) {
     currentUserRole = 'teacher';
     currentUserName = "Professor IFPR";
     currentUserEmail = "professor@ifpr.edu.br";
     currentUserInitials = "PI";
     currentUserAvatar = "https://picsum.photos/seed/teacher-avatar/40/40";
-    currentUserCoins = 0; // Teachers might not use coins directly
+    currentUserCoins = 0; 
   }
   // Add other role-specific details if /dashboard/staff etc. are implemented
 
@@ -154,19 +157,15 @@ export default function DashboardLayout({
         </SidebarContent>
 
         <SidebarFooter className="p-4 border-t border-sidebar-border mt-auto">
-           <Link href="/" passHref legacyBehavior> {/* Link to login page */}
-              <SidebarMenuButton
-                asChild
-                tooltip="Sair"
-                aria-label="Sair"
-                className="justify-start text-sidebar-foreground hover:bg-destructive/20 hover:text-destructive"
-              >
-                 <a>
-                   <LogOut className="h-4 w-4 shrink-0" />
-                   <span className="group-data-[collapsible=icon]:hidden">Sair</span>
-                 </a>
-              </SidebarMenuButton>
-           </Link>
+           <SidebarMenuButton
+             tooltip="Sair"
+             aria-label="Sair"
+             className="justify-start text-sidebar-foreground hover:bg-destructive/20 hover:text-destructive"
+             onClick={() => window.location.href = '/'} // Navigate programmatically
+           >
+             <LogOut className="h-4 w-4 shrink-0" />
+             <span className="group-data-[collapsible=icon]:hidden">Sair</span>
+           </SidebarMenuButton>
         </SidebarFooter>
       </Sidebar>
 
@@ -175,7 +174,7 @@ export default function DashboardLayout({
           <div className="flex items-center gap-2">
              <SidebarTrigger className="md:hidden" />
              <h1 className="text-lg font-semibold text-foreground hidden sm:block">
-               {currentNavItem?.label || "Dashboard"}
+               {currentNavItem?.label || (userData.role === 'admin' ? 'Painel Admin' : userData.role === 'teacher' ? 'Painel Professor' : 'Início')}
              </h1>
           </div>
 
