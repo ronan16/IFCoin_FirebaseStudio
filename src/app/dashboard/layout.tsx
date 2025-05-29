@@ -1,3 +1,4 @@
+
 // src/app/dashboard/layout.tsx
 "use client";
 
@@ -30,7 +31,7 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
   SidebarInset,
-} from "@/components/ui/sidebar"; // Adjusted import path
+} from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -44,16 +45,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-
-// Mock user data - replace with actual user data fetching logic
-const userData = {
-  name: "Admin User",
-  email: "admin@ifpr.edu.br",
-  role: "admin", // or 'teacher', 'admin'
-  avatarUrl: "https://picsum.photos/id/42/40/40", // Placeholder avatar
-  initials: "AU",
-  coins: 9999, // Example coin balance
-};
 
 type NavItem = {
   href: string;
@@ -81,14 +72,48 @@ export default function DashboardLayout({
 }) {
   const pathname = usePathname();
 
+  let currentUserRole: 'student' | 'teacher' | 'staff' | 'admin' = 'student'; // Default to student
+  let currentUserName = "Aluno Padrão";
+  let currentUserEmail = "aluno@ifpr.edu.br";
+  let currentUserInitials = "AP";
+  let currentUserAvatar = "https://picsum.photos/seed/student-avatar/40/40";
+  let currentUserCoins = 150;
+
+  if (pathname === '/dashboard/admin') {
+    currentUserRole = 'admin';
+    currentUserName = "Admin User";
+    currentUserEmail = "admin@admin.com"; // Matching login form
+    currentUserInitials = "AU";
+    currentUserAvatar = "https://picsum.photos/seed/admin-avatar/40/40";
+    currentUserCoins = 9999;
+  } else if (pathname === '/dashboard/teacher') {
+    currentUserRole = 'teacher';
+    currentUserName = "Professor IFPR";
+    currentUserEmail = "professor@ifpr.edu.br";
+    currentUserInitials = "PI";
+    currentUserAvatar = "https://picsum.photos/seed/teacher-avatar/40/40";
+    currentUserCoins = 0; // Teachers might not use coins directly
+  }
+  // Add other role-specific details if /dashboard/staff etc. are implemented
+
+  const userData = {
+    name: currentUserName,
+    email: currentUserEmail,
+    role: currentUserRole,
+    avatarUrl: currentUserAvatar,
+    initials: currentUserInitials,
+    coins: currentUserCoins,
+  };
+
   const filteredNavItems = navItems.filter(item => item.roles.includes(userData.role as any));
+  const currentNavItem = navItems.find(item => pathname === item.href || (pathname.startsWith(item.href) && item.href !== '/dashboard'));
+
 
   return (
     <SidebarProvider defaultOpen={true}>
       <Sidebar>
         <SidebarHeader className="p-4 border-b border-sidebar-border">
            <div className="flex items-center gap-2 justify-center group-data-[collapsible=icon]:justify-center">
-                {/* Placeholder Logo */}
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" className="h-8 w-8 text-sidebar-primary">
                     <circle cx="50" cy="50" r="45" fill="currentColor" />
                     <text x="50" y="60" fontSize="30" fill="hsl(var(--sidebar-primary-foreground))" textAnchor="middle" fontWeight="bold">IF</text>
@@ -106,13 +131,13 @@ export default function DashboardLayout({
                 <Link href={item.href} passHref legacyBehavior>
                   <SidebarMenuButton
                     asChild
-                    isActive={pathname === item.href}
+                    isActive={pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href))}
                     disabled={item.disabled}
                     tooltip={item.label}
                     aria-label={item.label}
                     className={cn(
                         "justify-start",
-                        pathname === item.href ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                        (pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href))) ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                     )}
                   >
                     <a>
@@ -129,7 +154,7 @@ export default function DashboardLayout({
         </SidebarContent>
 
         <SidebarFooter className="p-4 border-t border-sidebar-border mt-auto">
-           <Link href="/" passHref legacyBehavior>
+           <Link href="/" passHref legacyBehavior> {/* Link to login page */}
               <SidebarMenuButton
                 asChild
                 tooltip="Sair"
@@ -146,17 +171,15 @@ export default function DashboardLayout({
       </Sidebar>
 
       <SidebarInset className="flex flex-col">
-        {/* Header */}
         <header className="sticky top-0 z-10 flex h-14 items-center justify-between gap-4 border-b bg-background px-4 sm:px-6">
           <div className="flex items-center gap-2">
              <SidebarTrigger className="md:hidden" />
              <h1 className="text-lg font-semibold text-foreground hidden sm:block">
-               {navItems.find(item => item.href === pathname)?.label || "Dashboard"}
+               {currentNavItem?.label || "Dashboard"}
              </h1>
           </div>
 
           <div className="flex items-center gap-4">
-             {/* Coin Balance (only for students) */}
              {userData.role === 'student' && (
                 <div className="flex items-center gap-2 p-2 rounded-md bg-secondary">
                    <Coins className="h-5 w-5 text-yellow-500" />
@@ -164,12 +187,11 @@ export default function DashboardLayout({
                 </div>
              )}
 
-             {/* Notifications */}
              <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                    <Button variant="ghost" size="icon" className="rounded-full relative">
                       <Bell className="h-5 w-5" />
-                      <Badge className="absolute -top-1 -right-1 h-4 w-4 justify-center p-0 text-xs bg-destructive text-destructive-foreground">3</Badge> {/* Example notification count */}
+                      <Badge className="absolute -top-1 -right-1 h-4 w-4 justify-center p-0 text-xs bg-destructive text-destructive-foreground">3</Badge>
                       <span className="sr-only">Notificações</span>
                    </Button>
                 </DropdownMenuTrigger>
@@ -184,7 +206,6 @@ export default function DashboardLayout({
                 </DropdownMenuContent>
              </DropdownMenu>
 
-             {/* User Menu */}
              <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                    <Button variant="ghost" className="relative h-9 w-9 rounded-full">
@@ -214,7 +235,7 @@ export default function DashboardLayout({
                       <span>Configurações</span>
                    </DropdownMenuItem>
                    <DropdownMenuSeparator />
-                   <DropdownMenuItem onClick={() => window.location.href = '/'}> {/* Simple logout redirect */}
+                   <DropdownMenuItem onClick={() => window.location.href = '/'}>
                       <LogOut className="mr-2 h-4 w-4" />
                       <span>Sair</span>
                    </DropdownMenuItem>
@@ -223,7 +244,6 @@ export default function DashboardLayout({
           </div>
         </header>
 
-        {/* Main Content Area */}
         <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 bg-secondary/50 page-transition">
           {children}
         </main>

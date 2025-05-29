@@ -1,3 +1,4 @@
+
 "use client";
 
 import * as React from "react";
@@ -15,20 +16,17 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2 } from "lucide-react"; // Import Loader2 for loading state
-import Link from 'next/link'; // Import Link for navigation
-// import { signInWithEmailAndPassword } from "firebase/auth"; // Import Firebase Auth function
-// import { auth } from "@/lib/firebase/firebase"; // Import Firebase auth instance (adjust path if needed)
+import { Loader2 } from "lucide-react";
+import Link from 'next/link';
 
 const formSchema = z.object({
   email: z.string().email({ message: "Por favor, insira um email válido." }),
-  password: z.string().min(6, { message: "A senha deve ter pelo menos 6 caracteres." }),
+  password: z.string().min(1, { message: "A senha é obrigatória." }), // Changed min length for simplicity of "admin" password
 });
 
 export function LoginForm() {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = React.useState(false);
-  // const router = useRouter(); // If using Next.js router
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -43,51 +41,40 @@ export function LoginForm() {
     console.log("Form Submitted:", values);
 
     try {
-      // --- Firebase Authentication Logic (Example) ---
-      // const userCredential = await signInWithEmailAndPassword(auth, values.email, values.password);
-      // const user = userCredential.user;
-      // console.log("User logged in:", user);
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
-      // Simulate API call & role-based redirect
-      await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate network delay
+      let userRole = 'student'; // Default role
+      let redirectPath = '/dashboard';
 
-      toast({
-        title: "Login bem-sucedido!",
-        description: "Redirecionando para o painel...",
-        variant: "default", // Use 'default' or 'success' if defined
-      });
-
-      // TODO: Fetch user role from backend/database after successful login
-      const userRole = 'student'; // Placeholder - Replace with actual role fetching
-
-      // Redirect based on role (adjust paths as needed)
-      if (userRole === 'admin') {
-         // window.location.href = '/admin/dashboard'; // Or use Next.js router
-         console.log("Redirecting to Admin Dashboard");
-      } else if (userRole === 'teacher' || userRole === 'staff') {
-         // window.location.href = '/teacher/dashboard';
-         console.log("Redirecting to Teacher Dashboard");
+      if (values.email === 'admin@admin.com' && values.password === 'admin') {
+        userRole = 'admin';
+        redirectPath = '/dashboard/admin';
+        toast({
+          title: "Login de Administrador bem-sucedido!",
+          description: "Redirecionando para o painel administrativo...",
+          variant: "default",
+        });
       } else {
-         // window.location.href = '/student/dashboard';
-         console.log("Redirecting to Student Dashboard");
+        // For any other login, treat as student
+        // In a real app, you would validate credentials against a database
+        toast({
+          title: "Login bem-sucedido!",
+          description: "Redirecionando para o painel do aluno...",
+          variant: "default",
+        });
       }
-       // Example: Redirect to a generic dashboard for now
-       window.location.href = '/dashboard';
 
+      // Store role in localStorage for layout to pick up (simple session simulation)
+      // localStorage.setItem('userRole', userRole); // This is one way, but layout will use path
+
+      window.location.href = redirectPath;
 
     } catch (error: any) {
       console.error("Login failed:", error);
-      // let errorMessage = "Falha no login. Verifique suas credenciais.";
-      // // Handle specific Firebase errors (optional)
-      // if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
-      //   errorMessage = "Email ou senha inválidos.";
-      // } else if (error.code === 'auth/too-many-requests') {
-      //    errorMessage = "Muitas tentativas de login. Tente novamente mais tarde.";
-      // }
-
       toast({
         title: "Erro no Login",
-        description: "Ocorreu um erro ao tentar fazer login. Por favor, tente novamente.", // Use generic message for now
+        description: "Email ou senha inválidos. Por favor, tente novamente.",
         variant: "destructive",
       });
     } finally {
