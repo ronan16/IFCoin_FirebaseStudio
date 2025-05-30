@@ -18,6 +18,7 @@ import {
   Coins,
   Bell,
   UserCircle, // Default icon
+  Loader2, // Added Loader2 import
 } from "lucide-react";
 
 import {
