@@ -49,7 +49,6 @@ export function LoginForm() {
       const userCredential = await signInWithEmailAndPassword(auth, values.email, values.password);
       const user = userCredential.user;
 
-      // Fetch user role from Firestore
       const userDocRef = doc(db, "users", user.uid);
       const userDocSnap = await getDoc(userDocRef);
 
@@ -57,40 +56,36 @@ export function LoginForm() {
       if (userDocSnap.exists()) {
         userRole = userDocSnap.data()?.role || 'student';
       } else {
+        // Fallback for hardcoded admin if Firestore profile is missing AND email matches
         if (values.email === 'admin@admin.com') {
             userRole = 'admin';
         }
-        console.warn("User document not found in Firestore for UID:", user.uid);
+        console.warn("User document not found in Firestore for UID:", user.uid, "- defaulting role or using admin override.");
       }
       
+      // Override for hardcoded admin credentials (useful for initial setup)
       if (values.email === 'admin@admin.com' && values.password === 'admin') {
         userRole = 'admin'; 
       }
 
-
       let redirectPath = '/dashboard';
+      let successMessage = "Login bem-sucedido!";
+      let successDescription = "Redirecionando para o painel...";
+
       if (userRole === 'admin') {
         redirectPath = '/dashboard/admin';
-        toast({
-          title: "Login de Administrador bem-sucedido!",
-          description: "Redirecionando para o painel administrativo...",
-          variant: "default",
-        });
-      } else if (userRole === 'teacher' || userRole === 'staff') { // Added staff role
+        successDescription = "Redirecionando para o painel administrativo...";
+      } else if (userRole === 'teacher' || userRole === 'staff') {
         redirectPath = '/dashboard/teacher';
-         toast({
-          title: `Login de ${userRole === 'teacher' ? 'Professor' : 'Servidor'} bem-sucedido!`,
-          description: `Redirecionando para o painel de ${userRole === 'teacher' ? 'professor' : 'servidor'}...`,
-          variant: "default",
-        });
+        successDescription = `Redirecionando para o painel de ${userRole === 'teacher' ? 'professor' : 'servidor'}...`;
       }
-      else { // Student
-        toast({
-          title: "Login bem-sucedido!",
-          description: "Redirecionando para o painel do aluno...",
-          variant: "default",
-        });
-      }
+      // For student, default redirectPath and messages are fine.
+      
+      toast({
+        title: successMessage,
+        description: successDescription,
+        variant: "default",
+      });
       
       router.push(redirectPath);
 

@@ -1,3 +1,4 @@
+
 // src/app/dashboard/page.tsx
 "use client";
 
@@ -22,29 +23,30 @@ export default function DashboardPage() {
       if (user) {
         const userDocRef = doc(db, "users", user.uid);
         const userDocSnap = await getDoc(userDocRef);
+        let roleFromDb = 'student'; // Default
+
         if (userDocSnap.exists()) {
-          const roleFromDb = userDocSnap.data()?.role || 'student';
-          setUserRole(roleFromDb);
-
-          // Redirect based on role if on base /dashboard path
-          if (pathname === '/dashboard') {
-            if (roleFromDb === 'admin') {
-              router.replace('/dashboard/admin');
-            } else if (roleFromDb === 'teacher') {
-              router.replace('/dashboard/teacher');
-            }
-            // Student remains on /dashboard
-          }
-
+          roleFromDb = userDocSnap.data()?.role || 'student';
         } else {
-           // Fallback for hardcoded admin or if Firestore profile is missing
+          // Fallback for hardcoded admin if Firestore profile is missing
           if (user.email === 'admin@admin.com') {
-             setUserRole('admin');
-             if (pathname === '/dashboard') router.replace('/dashboard/admin');
-          } else {
-            setUserRole('student'); // Default to student
+             roleFromDb = 'admin';
           }
+          console.warn("User document not found in Firestore for UID:", user.uid, "- defaulting role.");
         }
+        setUserRole(roleFromDb);
+
+        // Redirect based on role if on base /dashboard path
+        // This ensures users go to their specific main dashboard if they land on /dashboard
+        if (pathname === '/dashboard' || pathname === '/dashboard/') {
+          if (roleFromDb === 'admin') {
+            router.replace('/dashboard/admin');
+          } else if (roleFromDb === 'teacher' || roleFromDb === 'staff') {
+            router.replace('/dashboard/teacher');
+          }
+          // For 'student', they stay on /dashboard which renders StudentDashboard
+        }
+
       } else {
         router.replace('/'); // No user, redirect to login
       }
@@ -61,35 +63,26 @@ export default function DashboardPage() {
     );
   }
 
-  // This component will now mostly act as a router or loader.
-  // The actual dashboard content is rendered by specific role pages
-  // or the StudentDashboard if the user is a student and on /dashboard.
-
+  // Render specific dashboard based on the current path and confirmed userRole
+  // This part handles rendering if the user directly navigates to /dashboard/admin or /dashboard/teacher
   if (pathname === '/dashboard/admin' && userRole === 'admin') {
     return <AdminDashboard />;
   }
-  if (pathname === '/dashboard/teacher' && userRole === 'teacher') {
+  if (pathname === '/dashboard/teacher' && (userRole === 'teacher' || userRole === 'staff')) {
     return <TeacherDashboard />;
   }
-  // Default to StudentDashboard if role is student or if on /dashboard (after potential redirect)
+  // Default to StudentDashboard if role is student and path is /dashboard
   if (userRole === 'student' && (pathname === '/dashboard' || pathname === '/dashboard/')) {
       return <StudentDashboard />;
   }
   
-  // If the path doesn't match the role (e.g. student trying to access /dashboard/admin directly)
-  // The layout's auth check might redirect them, or you could show an unauthorized message.
-  // For now, returning null or a generic "loading/redirecting" is fine as the layout handles redirection.
-  // Or, if the role hasn't matched any specific dashboard path yet but we are on /dashboard
-  if (pathname === '/dashboard' && userRole === 'student') {
-    return <StudentDashboard />;
-  }
-
-
-  // Fallback if roles/paths don't line up, or still loading/redirecting
-  // This shouldn't typically be hit if redirects and loading state are correct
+  // Fallback for scenarios where path and role might mismatch after initial load/redirect
+  // or if still waiting for the redirect from the useEffect to complete.
+  // This should ideally not be hit often if redirects are clean.
   return (
      <div className="flex h-screen items-center justify-center">
-        <p>Carregando painel...</p>
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="ml-2">Carregando seu painel...</p>
       </div>
   );
 }

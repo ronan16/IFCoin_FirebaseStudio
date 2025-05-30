@@ -18,7 +18,8 @@ import {
   Menu,
   Coins,
   Bell,
-  Loader2, 
+  Loader2,
+  Award, // For Teacher Panel
 } from "lucide-react";
 
 import {
@@ -60,13 +61,13 @@ type NavItem = {
 };
 
 const navItems: NavItem[] = [
-  { href: "/dashboard", icon: Home, label: "Início", roles: ['student', 'teacher', 'staff', 'admin'] },
+  { href: "/dashboard", icon: Home, label: "Início", roles: ['student'] }, // Student only
   { href: "/dashboard/shop", icon: ShoppingBag, label: "Loja", roles: ['student'] },
   { href: "/dashboard/collection", icon: LayoutGrid, label: "Coleção", roles: ['student'] },
   { href: "/dashboard/trades", icon: Repeat, label: "Trocas", roles: ['student'] },
   { href: "/dashboard/events", icon: Calendar, label: "Eventos", roles: ['student', 'teacher', 'staff', 'admin'] },
   { href: "/dashboard/rankings", icon: Trophy, label: "Rankings", roles: ['student', 'teacher', 'staff', 'admin'] },
-  { href: "/dashboard/teacher", icon: Users, label: "Painel Professor", roles: ['teacher', 'staff'] }, 
+  { href: "/dashboard/teacher", icon: Award, label: "Painel Professor", roles: ['teacher', 'staff'] }, // Using Award icon
   { href: "/dashboard/admin", icon: UserCog, label: "Painel Admin", roles: ['admin'] },
 ];
 
@@ -76,8 +77,9 @@ interface UserProfile {
   role: 'student' | 'teacher' | 'staff' | 'admin';
   avatarUrl?: string;
   initials: string;
-  coins?: number;
-  course?: string; // Added course
+  coins?: number; 
+  course?: string; 
+  turma?: string; // Added Turma
   uid: string;
 }
 
@@ -106,12 +108,14 @@ export default function DashboardLayout({
             name: data.name || "Usuário",
             email: user.email || "email@desconhecido.com",
             role: data.role || "student",
-            course: data.course || "Não definido", // Fetch course
+            course: data.course || "Não definido",
+            turma: data.turma || "Não definida",
             initials: (data.name || "U").substring(0, 2).toUpperCase(),
-            coins: data.coins || 0,
+            coins: data.coins, // Coins might be undefined for teachers/admins
             avatarUrl: data.avatarUrl, 
           });
         } else {
+          // Fallback for hardcoded admin if Firestore profile is missing
           if (user.email === 'admin@admin.com') {
             setUserProfile({
                 uid: user.uid,
@@ -119,16 +123,18 @@ export default function DashboardLayout({
                 email: user.email,
                 role: 'admin',
                 course: "Administração",
+                turma: "N/A",
                 initials: "AM",
-                coins: 9999,
+                // coins: 9999, // Admins typically don't have game coins
              });
-          } else {
+          } else { // Default to student if no doc and not admin email
             setUserProfile({
                 uid: user.uid,
                 name: user.displayName || "Usuário",
                 email: user.email || "desconhecido@ifpr.edu.br",
                 role: 'student', 
                 course: "Não definido",
+                turma: "Não definida",
                 initials: (user.displayName || "U").substring(0,1).toUpperCase(),
                 coins: 0,
             });
@@ -162,12 +168,28 @@ export default function DashboardLayout({
     );
   }
 
-  const filteredNavItems = navItems.filter(item => userProfile && item.roles.includes(userProfile.role));
+  // Filter nav items based on user role
+  // Also, specific redirect for /dashboard if user is not student
+  let filteredNavItems = navItems.filter(item => userProfile && item.roles.includes(userProfile.role));
+  if (userProfile.role === 'teacher' || userProfile.role === 'staff') {
+      filteredNavItems = navItems.filter(item => item.roles.includes(userProfile.role) && item.href !== '/dashboard');
+  } else if (userProfile.role === 'admin') {
+      filteredNavItems = navItems.filter(item => item.roles.includes(userProfile.role) && item.href !== '/dashboard');
+  }
+
+
   const currentNavItem = navItems.find(item => pathname === item.href || (pathname.startsWith(item.href) && item.href !== '/dashboard'));
-  const pageTitle = currentNavItem?.label || 
-                    (userProfile.role === 'admin' && pathname.startsWith('/dashboard/admin') ? 'Painel Admin' :
-                    (userProfile.role === 'teacher' && pathname.startsWith('/dashboard/teacher') ? 'Painel Professor' :
-                    'Início'));
+  
+  let pageTitle = 'Painel';
+  if (currentNavItem) {
+    pageTitle = currentNavItem.label;
+  } else if (pathname === '/dashboard' && userProfile.role === 'student') {
+    pageTitle = 'Início';
+  } else if (pathname.startsWith('/dashboard/admin') && userProfile.role === 'admin') {
+    pageTitle = 'Painel Admin';
+  } else if (pathname.startsWith('/dashboard/teacher') && (userProfile.role === 'teacher' || userProfile.role === 'staff')) {
+    pageTitle = 'Painel Professor';
+  }
 
 
   return (
@@ -274,9 +296,14 @@ export default function DashboardLayout({
                          <p className="text-xs leading-none text-muted-foreground">
                             {userProfile.email}
                          </p>
-                         {userProfile.course && (
+                         {userProfile.course && (userProfile.role === 'student' || userProfile.role === 'teacher') && ( // Show course for students and teachers
                             <p className="text-xs leading-none text-muted-foreground">
                                 Curso: {userProfile.course}
+                            </p>
+                         )}
+                         {userProfile.turma && userProfile.role === 'student' && ( // Show turma only for students
+                            <p className="text-xs leading-none text-muted-foreground">
+                                Turma: {userProfile.turma}
                             </p>
                          )}
                          <Badge variant="outline" className="w-fit mt-1 capitalize">{userProfile.role}</Badge>

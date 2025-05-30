@@ -24,12 +24,15 @@ import { doc, setDoc } from "firebase/firestore"; // Import doc and setDoc
 import { useRouter } from "next/navigation";
 
 const coursesList = ["Informática", "Eletrotécnica", "Agroecologia", "Agropecuária", "Sistemas de Informação", "Eng. Agronômica", "Física"];
+// Example Turmas - In a real app, these might be dynamic or more structured
+const turmasList = ["1A", "1B", "2A", "2B", "3A", "3B", "4A", "4B", "TEC1", "TEC2"];
 
 const formSchema = z.object({
   name: z.string().min(3, { message: "O nome deve ter pelo menos 3 caracteres." }),
   ra: z.string().regex(/^\d+$/, { message: "RA deve conter apenas números." }).min(5, { message: "RA deve ter pelo menos 5 dígitos." }),
   email: z.string().email({ message: "Por favor, insira um email válido." }),
   course: z.string().min(1, { message: "Selecione um curso." }),
+  turma: z.string().min(1, { message: "Selecione uma turma." }), // Added Turma
   password: z.string().min(6, { message: "A senha deve ter pelo menos 6 caracteres." }),
   confirmPassword: z.string().min(6, { message: "A confirmação de senha deve ter pelo menos 6 caracteres." }),
 }).refine((data) => data.password === data.confirmPassword, {
@@ -49,6 +52,7 @@ export function RegisterForm() {
       ra: "",
       email: "",
       course: "",
+      turma: "", // Added Turma
       password: "",
       confirmPassword: "",
     },
@@ -69,6 +73,7 @@ export function RegisterForm() {
         ra: values.ra,
         email: values.email,
         course: values.course,
+        turma: values.turma, // Added Turma
         role: "student", // Default role
         createdAt: serverTimestamp(),
         coins: 0, // Initial coins
@@ -158,6 +163,30 @@ export function RegisterForm() {
                   {coursesList.map((course) => (
                     <SelectItem key={course} value={course}>
                       {course}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="turma"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Turma</FormLabel>
+              <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isLoading}>
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione sua turma" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {turmasList.map((turma) => (
+                    <SelectItem key={turma} value={turma}>
+                      {turma}
                     </SelectItem>
                   ))}
                 </SelectContent>
