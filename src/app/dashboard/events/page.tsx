@@ -1,60 +1,45 @@
 // src/app/dashboard/events/page.tsx
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, Clock, Star, Gift, Eye } from "lucide-react";
+import { Calendar, Clock, Star, Gift, Eye, Loader2 } from "lucide-react";
 import Image from 'next/image';
-import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
+import { db } from '@/lib/firebase/firebase';
+import { collection, onSnapshot, Timestamp, getDocs } from 'firebase/firestore';
+import { useToast } from '@/hooks/use-toast';
 
-// Mock Data - Replace with actual data fetching
-const events = [
-    {
-        id: "event01",
-        name: "Semana da Tecnologia",
-        description: "Participe das palestras e workshops para ganhar IFCoins extras e ter a chance de obter cartas exclusivas!",
-        startDate: "2024-10-15",
-        endDate: "2024-10-20",
-        bonusMultiplier: 2,
-        status: "Ativo",
-        imageUrl: "https://picsum.photos/seed/techweek/400/200",
-        linkedCards: [
-            { id: "card002", name: "Espírito Tecnológico", rarity: "Lendário", imageUrl: "https://picsum.photos/seed/tech/100/140" }
-        ]
-    },
-    {
-        id: "event02",
-        name: "Feira de Ciências Interativa",
-        description: "Apresente seu projeto ou visite os stands para acumular pontos e moedas. Cartas temáticas disponíveis!",
-        startDate: "2024-11-01",
-        endDate: "2024-11-05",
-        bonusMultiplier: 1.5,
-        status: "Agendado",
-        imageUrl: "https://picsum.photos/seed/sciencefair/400/200",
-        linkedCards: []
-    },
-    {
-        id: "event03",
-        name: "Gincana Cultural IFPR",
-        description: "Evento concluído. Parabéns às equipes vencedoras!",
-        startDate: "2024-09-01",
-        endDate: "2024-09-07",
-        bonusMultiplier: 1,
-        status: "Concluído",
-        imageUrl: "https://picsum.photos/seed/gincana/400/200",
-        linkedCards: [
-             { id: "card010", name: "Troféu Gincana", rarity: "Raro", imageUrl: "https://picsum.photos/seed/trophy/100/140" }
-        ]
-    },
-];
+interface CardMasterData {
+    id: string;
+    name: string;
+    rarity: "Comum" | "Raro" | "Lendário" | "Mítico";
+    imageUrl: string;
+}
+
+interface EventData {
+    id: string;
+    name: string;
+    description: string;
+    startDate: Timestamp | Date;
+    endDate: Timestamp | Date;
+    bonusMultiplier: number;
+    status?: 'Ativo' | 'Agendado' | 'Concluído'; // Calculated client-side
+    imageUrl: string;
+    linkedCards?: string[]; // Array of card IDs
+}
+
+interface DisplayEvent extends EventData {
+    displayLinkedCards: CardMasterData[];
+}
+
 
 const getStatusBadgeVariant = (status: string): "default" | "secondary" | "outline" | "destructive" | null | undefined => {
      switch (status.toLowerCase()) {
-        case 'ativo': return 'default'; // Greenish/Default (or define a success variant)
-        case 'agendado': return 'secondary'; // Yellowish/Secondary
-        case 'concluído': return 'outline'; // Greyish/Outline
+        case 'ativo': return 'default';
+        case 'agendado': return 'secondary';
+        case 'concluído': return 'outline';
         default: return 'outline';
      }
  }
@@ -69,18 +54,102 @@ const getRarityClass = (rarity: string) => {
   }
 };
 
+const getEventStatus = (event: EventData): 'Ativo' | 'Agendado' | 'Concluído' => {
+    const now = new Date();
+    const startDate = event.startDate instanceof Timestamp ? event.startDate.toDate() : new Date(event.startDate);
+    const endDate = event.endDate instanceof Timestamp ? event.endDate.toDate() : new Date(event.endDate);
+
+    if (endDate < now) return 'Concluído';
+    if (startDate > now) return 'Agendado';
+    return 'Ativo';
+};
+
 
 export default function EventsPage() {
+    const { toast } = useToast();
     const [filter, setFilter] = useState<'all' | 'active' | 'upcoming' | 'past'>('all');
+    const [allEvents, setAllEvents] = useState<EventData[]>([]);
+    const [allCardsMap, setAllCardsMap] = useState<Map<string, CardMasterData>>(new Map());
+    const [isLoading, setIsLoading] = useState(true);
 
-    const filteredEvents = events.filter(event => {
+    useEffect(() => {
+        // Fetch all card definitions once to build a map for easy lookup
+        const fetchAllCards = async () => {
+            try {
+                const cardsCollectionRef = collection(db, "cards");
+                const querySnapshot = await getDocs(cardsCollectionRef);
+                const cardsMap = new Map<string, CardMasterData>();
+                querySnapshot.forEach((doc) => {
+                    cardsMap.set(doc.id, { id: doc.id, ...doc.data() } as CardMasterData);
+                });
+                setAllCardsMap(cardsMap);
+            } catch (error: any) {
+                console.error("Error fetching all card definitions:", error);
+                toast({ title: "Erro ao buscar cartas", description: error.message, variant: "destructive" });
+            }
+        };
+        fetchAllCards();
+    }, [toast]);
+
+    useEffect(() => {
+        setIsLoading(true);
+        const unsubscribeEvents = onSnapshot(collection(db, "events"), (snapshot) => {
+            const eventsData = snapshot.docs.map(doc => {
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    ...data,
+                    startDate: data.startDate, // Firestore Timestamps are fine for now
+                    endDate: data.endDate,
+                } as EventData;
+            });
+            setAllEvents(eventsData.map(e => ({ ...e, status: getEventStatus(e) }))); // Calculate status here
+            setIsLoading(false);
+        }, (error) => {
+            console.error("Error fetching events:", error);
+            toast({ title: "Erro ao buscar eventos", description: error.message, variant: "destructive" });
+            setIsLoading(false);
+        });
+
+        return () => unsubscribeEvents();
+    }, [toast]);
+
+    const displayEvents: DisplayEvent[] = allEvents
+        .map(event => {
+            const linkedCardDetails: CardMasterData[] = [];
+            if (event.linkedCards && allCardsMap.size > 0) {
+                event.linkedCards.forEach(cardId => {
+                    const cardDetail = allCardsMap.get(cardId);
+                    if (cardDetail) {
+                        linkedCardDetails.push(cardDetail);
+                    }
+                });
+            }
+            return { ...event, displayLinkedCards: linkedCardDetails };
+        });
+
+
+    const filteredEvents = displayEvents.filter(event => {
         if (filter === 'all') return true;
         if (filter === 'active' && event.status === 'Ativo') return true;
         if (filter === 'upcoming' && event.status === 'Agendado') return true;
         if (filter === 'past' && event.status === 'Concluído') return true;
         return false;
-    }).sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime()); // Sort by start date desc
+    }).sort((a, b) => { // Sort by start date desc
+        const dateA = a.startDate instanceof Timestamp ? a.startDate.toDate() : new Date(a.startDate);
+        const dateB = b.startDate instanceof Timestamp ? b.startDate.toDate() : new Date(b.startDate);
+        return dateB.getTime() - dateA.getTime();
+    });
 
+
+    if (isLoading) {
+        return (
+            <div className="flex h-full items-center justify-center">
+                <Loader2 className="h-10 w-10 animate-spin text-primary" />
+                <p className="ml-2">Carregando eventos...</p>
+            </div>
+        );
+    }
 
     return (
         <div className="container mx-auto space-y-6">
@@ -105,16 +174,20 @@ export default function EventsPage() {
                 {filteredEvents.map((event) => (
                     <Card key={event.id} className="overflow-hidden shadow-md hover:shadow-lg transition-shadow">
                         <CardHeader className="p-0 relative">
-                             <Image src={event.imageUrl} alt={event.name} width={800} height={200} className="w-full h-48 object-cover" />
+                             <Image src={event.imageUrl || "https://placehold.co/800x200.png"} alt={event.name} width={800} height={200} className="w-full h-48 object-cover" data-ai-hint="event banner" />
                              <div className="absolute top-4 right-4">
-                                 <Badge variant={getStatusBadgeVariant(event.status)} className="text-xs font-semibold">{event.status}</Badge>
+                                 <Badge variant={getStatusBadgeVariant(event.status || 'Agendado')} className="text-xs font-semibold">{event.status}</Badge>
                              </div>
                         </CardHeader>
                         <CardContent className="p-6 grid md:grid-cols-3 gap-6">
                             <div className="md:col-span-2 space-y-3">
                                 <CardTitle className="text-2xl text-primary">{event.name}</CardTitle>
                                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                                     <span className="flex items-center gap-1"><Clock className="h-4 w-4" /> {new Date(event.startDate).toLocaleDateString('pt-BR')} - {new Date(event.endDate).toLocaleDateString('pt-BR')}</span>
+                                     <span className="flex items-center gap-1"><Clock className="h-4 w-4" />
+                                        {(event.startDate instanceof Timestamp ? event.startDate.toDate() : new Date(event.startDate)).toLocaleDateString('pt-BR')}
+                                        {' - '}
+                                        {(event.endDate instanceof Timestamp ? event.endDate.toDate() : new Date(event.endDate)).toLocaleDateString('pt-BR')}
+                                     </span>
                                      {event.status === 'Ativo' && event.bonusMultiplier > 1 && (
                                          <span className="flex items-center gap-1 font-semibold text-accent"><Star className="h-4 w-4 text-yellow-500" /> Bônus de {event.bonusMultiplier}x IFCoins!</span>
                                      )}
@@ -123,11 +196,11 @@ export default function EventsPage() {
                             </div>
                             <div className="space-y-3">
                                  <h4 className="font-semibold flex items-center gap-1"><Gift className="h-4 w-4"/> Recompensas Especiais</h4>
-                                 {event.linkedCards.length > 0 ? (
+                                 {event.displayLinkedCards.length > 0 ? (
                                     <div className="flex flex-wrap gap-2">
-                                        {event.linkedCards.map(card => (
+                                        {event.displayLinkedCards.map(card => (
                                              <div key={card.id} className="text-center p-1 border rounded-md bg-secondary/50 w-24">
-                                                <Image src={card.imageUrl} alt={card.name} width={60} height={84} className="mx-auto rounded"/>
+                                                <Image src={card.imageUrl || "https://placehold.co/100x140.png"} alt={card.name} width={60} height={84} className="mx-auto rounded" data-ai-hint="trading card small" />
                                                  <p className="text-[10px] font-medium truncate mt-1">{card.name}</p>
                                                  <Badge variant="outline" className={`text-[9px] scale-90 ${getRarityClass(card.rarity)}`}>{card.rarity}</Badge>
                                              </div>
@@ -136,19 +209,8 @@ export default function EventsPage() {
                                  ) : (
                                     <p className="text-xs text-muted-foreground">Nenhuma carta especial vinculada a este evento.</p>
                                  )}
-                                {/* Add link to shop if cards are available? */}
-                                {/* {event.status === 'Ativo' && event.linkedCards.length > 0 && (
-                                     <Button variant="link" size="sm" className="p-0 h-auto text-primary mt-2" onClick={() => window.location.href='/dashboard/shop'}>
-                                         <Eye className="mr-1 h-3 w-3"/> Ver na Loja
-                                     </Button>
-                                )} */}
                             </div>
                         </CardContent>
-                        {/* Optional Footer */}
-                         {/* <Separator />
-                         <CardFooter className="p-4">
-                             <Button variant="outline" size="sm">Ver Detalhes</Button>
-                         </CardFooter> */}
                     </Card>
                 ))}
             </div>
