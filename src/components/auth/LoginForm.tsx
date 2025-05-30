@@ -1,4 +1,3 @@
-
 "use client";
 
 import * as React from "react";
@@ -18,14 +17,19 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 import Link from 'next/link';
+import { auth, db } from "@/lib/firebase/firebase";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
+import { useRouter } from "next/navigation";
 
 const formSchema = z.object({
   email: z.string().email({ message: "Por favor, insira um email válido." }),
-  password: z.string().min(1, { message: "A senha é obrigatória." }), // Changed min length for simplicity of "admin" password
+  password: z.string().min(1, { message: "A senha é obrigatória." }),
 });
 
 export function LoginForm() {
   const { toast } = useToast();
+  const router = useRouter();
   const [isLoading, setIsLoading] = React.useState(false);
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -38,43 +42,70 @@ export function LoginForm() {
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsLoading(true);
-    console.log("Form Submitted:", values);
+    console.log("Login Submitted:", values);
 
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const userCredential = await signInWithEmailAndPassword(auth, values.email, values.password);
+      const user = userCredential.user;
+
+      // Fetch user role from Firestore
+      const userDocRef = doc(db, "users", user.uid);
+      const userDocSnap = await getDoc(userDocRef);
 
       let userRole = 'student'; // Default role
-      let redirectPath = '/dashboard';
-
+      if (userDocSnap.exists()) {
+        userRole = userDocSnap.data()?.role || 'student';
+      } else {
+        // Fallback for users created before Firestore profile, or edge cases
+        // For this app, we can keep the admin@admin.com check as a super-admin fallback
+        // if Firestore profile doesn't exist (though it should for new users)
+        if (values.email === 'admin@admin.com') {
+            userRole = 'admin';
+        }
+        console.warn("User document not found in Firestore for UID:", user.uid);
+      }
+      
+      // Specific hardcoded super-admin check - can be removed if all admins are via Firestore role
       if (values.email === 'admin@admin.com' && values.password === 'admin') {
-        userRole = 'admin';
+        userRole = 'admin'; // Override if it's the hardcoded super admin
+      }
+
+
+      let redirectPath = '/dashboard';
+      if (userRole === 'admin') {
         redirectPath = '/dashboard/admin';
         toast({
           title: "Login de Administrador bem-sucedido!",
           description: "Redirecionando para o painel administrativo...",
           variant: "default",
         });
-      } else {
-        // For any other login, treat as student
-        // In a real app, you would validate credentials against a database
+      } else if (userRole === 'teacher') {
+        redirectPath = '/dashboard/teacher';
+         toast({
+          title: "Login de Professor bem-sucedido!",
+          description: "Redirecionando para o painel do professor...",
+          variant: "default",
+        });
+      }
+      else {
         toast({
           title: "Login bem-sucedido!",
           description: "Redirecionando para o painel do aluno...",
           variant: "default",
         });
       }
-
-      // Store role in localStorage for layout to pick up (simple session simulation)
-      // localStorage.setItem('userRole', userRole); // This is one way, but layout will use path
-
-      window.location.href = redirectPath;
+      
+      router.push(redirectPath);
 
     } catch (error: any) {
       console.error("Login failed:", error);
+      let errorMessage = "Email ou senha inválidos. Por favor, tente novamente.";
+      if (error.code === "auth/user-not-found" || error.code === "auth/wrong-password" || error.code === "auth/invalid-credential") {
+        errorMessage = "Email ou senha inválidos.";
+      }
       toast({
         title: "Erro no Login",
-        description: "Email ou senha inválidos. Por favor, tente novamente.",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {

@@ -1,5 +1,8 @@
 import { LoginForm } from '@/components/auth/LoginForm';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import Link from 'next/link';
+import { Separator } from '@/components/ui/separator';
 
 export default function LoginPage() {
   return (
@@ -18,6 +21,10 @@ export default function LoginPage() {
         </CardHeader>
         <CardContent>
           <LoginForm />
+          <Separator className="my-6" />
+          <Button variant="outline" className="w-full" asChild>
+            <Link href="/register">Criar Nova Conta</Link>
+          </Button>
         </CardContent>
       </Card>
       <footer className="mt-8 text-sm text-muted-foreground">
