@@ -105,7 +105,8 @@ const eventSchema = z.object({
 export function AdminDashboard() {
     const { toast } = useToast();
     const [activeTab, setActiveTab] = useState('users');
-    const [isLoading, setIsLoading] = useState(false);
+    const [isInitialLoading, setIsInitialLoading] = useState(true); // For overall page data
+    const [isFormProcessing, setIsFormProcessing] = useState(false); // For form submissions, deletions etc.
 
     const [users, setUsers] = useState<UserData[]>([]);
     const [cards, setCards] = useState<CardData[]>([]);
@@ -115,40 +116,41 @@ export function AdminDashboard() {
     const [editingCard, setEditingCard] = useState<CardData | null>(null);
     const [editingEvent, setEditingEvent] = useState<EventData | null>(null);
 
+    const [usersLoaded, setUsersLoaded] = useState(false);
+    const [cardsLoaded, setCardsLoaded] = useState(false);
+    const [eventsLoaded, setEventsLoaded] = useState(false);
+
 
     // Fetch Users
     useEffect(() => {
-        setIsLoading(true);
         const unsubscribe = onSnapshot(collection(db, "users"), (snapshot) => {
             const usersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserData));
             setUsers(usersData);
-            setIsLoading(false);
+            setUsersLoaded(true);
         }, (error) => {
             console.error("Error fetching users: ", error);
             toast({ title: "Erro ao buscar usuários", description: error.message, variant: "destructive" });
-            setIsLoading(false);
+            setUsersLoaded(true);
         });
         return () => unsubscribe();
     }, [toast]);
 
     // Fetch Cards
     useEffect(() => {
-        setIsLoading(true);
         const unsubscribe = onSnapshot(collection(db, "cards"), (snapshot) => {
             const cardsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CardData));
             setCards(cardsData);
-            setIsLoading(false);
+            setCardsLoaded(true);
         }, (error) => {
             console.error("Error fetching cards: ", error);
             toast({ title: "Erro ao buscar cartas", description: error.message, variant: "destructive" });
-            setIsLoading(false);
+            setCardsLoaded(true);
         });
         return () => unsubscribe();
     }, [toast]);
     
     // Fetch Events
     useEffect(() => {
-        setIsLoading(true);
         const unsubscribe = onSnapshot(collection(db, "events"), (snapshot) => {
             const eventsData = snapshot.docs.map(doc => {
                 const data = doc.data();
@@ -160,14 +162,20 @@ export function AdminDashboard() {
                 } as EventData;
             });
             setEvents(eventsData);
-            setIsLoading(false);
+            setEventsLoaded(true);
         }, (error) => {
             console.error("Error fetching events: ", error);
             toast({ title: "Erro ao buscar eventos", description: error.message, variant: "destructive" });
-            setIsLoading(false);
+            setEventsLoaded(true);
         });
         return () => unsubscribe();
     }, [toast]);
+
+    useEffect(() => {
+        if (usersLoaded && cardsLoaded && eventsLoaded) {
+            setIsInitialLoading(false);
+        }
+    }, [usersLoaded, cardsLoaded, eventsLoaded]);
 
 
     const cardForm = useForm<z.infer<typeof cardSchema>>({
@@ -231,7 +239,7 @@ export function AdminDashboard() {
 
 
     async function onCardSubmit(values: z.infer<typeof cardSchema>) {
-        setIsLoading(true);
+        setIsFormProcessing(true);
         try {
             const dataToSave = {
                 ...values,
@@ -252,24 +260,24 @@ export function AdminDashboard() {
             console.error("Card submission error: ", error);
             toast({ title: "Erro ao Salvar Carta", description: error.message, variant: "destructive" });
         } finally {
-            setIsLoading(false);
+            setIsFormProcessing(false);
         }
     }
     
     async function deleteCard(cardId: string) {
-        setIsLoading(true);
+        setIsFormProcessing(true);
         try {
             await deleteDoc(doc(db, "cards", cardId));
             toast({ title: "Carta Excluída!", description: "A carta foi removida do sistema." });
         } catch (error: any) {
             toast({ title: "Erro ao Excluir Carta", description: error.message, variant: "destructive" });
         } finally {
-            setIsLoading(false);
+            setIsFormProcessing(false);
         }
     }
 
      async function onEventSubmit(values: z.infer<typeof eventSchema>) {
-        setIsLoading(true);
+        setIsFormProcessing(true);
         try {
             const eventData = {
                 ...values,
@@ -289,24 +297,24 @@ export function AdminDashboard() {
             console.error("Event submission error: ", error);
             toast({ title: "Erro ao Salvar Evento", description: error.message, variant: "destructive" });
         } finally {
-            setIsLoading(false);
+            setIsFormProcessing(false);
         }
     }
 
     async function deleteEvent(eventId: string) {
-        setIsLoading(true);
+        setIsFormProcessing(true);
         try {
             await deleteDoc(doc(db, "events", eventId));
             toast({ title: "Evento Excluído!", description: "O evento foi removido do sistema." });
         } catch (error: any) {
             toast({ title: "Erro ao Excluir Evento", description: error.message, variant: "destructive" });
         } finally {
-            setIsLoading(false);
+            setIsFormProcessing(false);
         }
     }
     
     async function onUserSubmit(values: z.infer<typeof studentSchema>) {
-        setIsLoading(true);
+        setIsFormProcessing(true);
         try {
             if (editingUser) {
                 await updateDoc(doc(db, "users", editingUser.id), {
@@ -324,7 +332,7 @@ export function AdminDashboard() {
         } catch (error: any) {
             toast({ title: "Erro ao Salvar Usuário", description: error.message, variant: "destructive" });
         } finally {
-            setIsLoading(false);
+            setIsFormProcessing(false);
         }
     }
 
@@ -346,7 +354,7 @@ export function AdminDashboard() {
 
 
     const renderContent = () => {
-        if (isLoading && (activeTab === 'users' && users.length === 0) || (activeTab === 'cards' && cards.length === 0) || (activeTab === 'events' && events.length === 0)) {
+        if (isInitialLoading) {
             return <div className="flex justify-center items-center p-10"><Loader2 className="h-8 w-8 animate-spin text-primary" /> Carregando dados...</div>;
         }
 
@@ -368,8 +376,8 @@ export function AdminDashboard() {
                                          <FormField control={userForm.control} name="ra" render={({ field }) => (<FormItem><FormLabel>RA</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
                                          <FormField control={userForm.control} name="role" render={({ field }) => (<FormItem><FormLabel>Função</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent><SelectItem value="student">Aluno</SelectItem><SelectItem value="teacher">Professor</SelectItem><SelectItem value="staff">Servidor</SelectItem><SelectItem value="admin">Admin</SelectItem></SelectContent></Select><FormMessage /></FormItem>)} />
                                         <div className="flex gap-2">
-                                            <Button type="submit" disabled={isLoading} className="bg-accent hover:bg-accent/90 text-accent-foreground"> <UserPlus className="mr-2 h-4 w-4" /> Salvar Usuário</Button>
-                                            <Button variant="outline" onClick={() => { setEditingUser(null); userForm.reset({ name: "", ra: "", email: "", role: "student" });}} disabled={isLoading}>Cancelar</Button>
+                                            <Button type="submit" disabled={isFormProcessing} className="bg-accent hover:bg-accent/90 text-accent-foreground"> <UserPlus className="mr-2 h-4 w-4" /> Salvar Usuário</Button>
+                                            <Button variant="outline" onClick={() => { setEditingUser(null); userForm.reset({ name: "", ra: "", email: "", role: "student" });}} disabled={isFormProcessing}>Cancelar</Button>
                                         </div>
                                     </form>
                                 </Form>
@@ -405,12 +413,15 @@ export function AdminDashboard() {
                                                 <TableCell>{user.ra || '-'}</TableCell>
                                                 <TableCell><Badge variant="secondary" className="capitalize">{user.role}</Badge></TableCell>
                                                 <TableCell className="text-right">
-                                                    <Button variant="ghost" size="icon" onClick={() => setEditingUser(user)} className="hover:text-primary" disabled={isLoading}>
+                                                    <Button variant="ghost" size="icon" onClick={() => setEditingUser(user)} className="hover:text-primary" disabled={isFormProcessing}>
                                                         <Edit3 className="h-4 w-4"/>
                                                     </Button>
                                                 </TableCell>
                                             </TableRow>
                                         ))}
+                                        {users.length === 0 && !isInitialLoading && (
+                                            <TableRow><TableCell colSpan={5} className="text-center py-4">Nenhum usuário encontrado.</TableCell></TableRow>
+                                        )}
                                     </TableBody>
                                 </Table>
                              </ScrollArea>
@@ -436,8 +447,8 @@ export function AdminDashboard() {
                                      <FormField control={cardForm.control} name="eventId" render={({ field }) => (<FormItem><FormLabel>Vincular a Evento (Opcional)</FormLabel><Select onValueChange={field.onChange} value={field.value ?? ""}><FormControl><SelectTrigger><SelectValue placeholder="Nenhum evento selecionado" /></SelectTrigger></FormControl><SelectContent><SelectItem value="">Nenhum</SelectItem>{events.map(event => (<SelectItem key={event.id} value={event.id}>{event.name}</SelectItem>))}</SelectContent></Select><FormDescription className="text-xs">Carta disponível na loja apenas durante este evento (se ativo).</FormDescription><FormMessage /></FormItem>)} />
                                     <FormField control={cardForm.control} name="available" render={({ field }) => (<FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm bg-background"><div className="space-y-0.5"><FormLabel>Disponível na Loja Geral?</FormLabel><FormDescription className="text-xs">Se esta carta pode ser comprada na loja (mesmo fora de evento, se não houver evento vinculado).</FormDescription></div><FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl></FormItem>)} />
                                     <div className="flex gap-2">
-                                        <Button type="submit" disabled={isLoading} className="bg-accent hover:bg-accent/90 text-accent-foreground"> <CreditCard className="mr-2 h-4 w-4" /> {editingCard ? "Salvar Alterações" : "Adicionar Carta"}</Button>
-                                        {editingCard && <Button variant="outline" onClick={() => { setEditingCard(null); cardForm.reset({ name: "", rarity: "Comum", price: 0, imageUrl: "https://placehold.co/200x280.png", available: true, copiesAvailable: null, eventId: null }); }} disabled={isLoading}>Cancelar Edição</Button>}
+                                        <Button type="submit" disabled={isFormProcessing} className="bg-accent hover:bg-accent/90 text-accent-foreground"> <CreditCard className="mr-2 h-4 w-4" /> {editingCard ? "Salvar Alterações" : "Adicionar Carta"}</Button>
+                                        {editingCard && <Button variant="outline" onClick={() => { setEditingCard(null); cardForm.reset({ name: "", rarity: "Comum", price: 0, imageUrl: "https://placehold.co/200x280.png", available: true, copiesAvailable: null, eventId: null }); }} disabled={isFormProcessing}>Cancelar Edição</Button>}
                                     </div>
                                 </form>
                             </Form>
@@ -463,10 +474,10 @@ export function AdminDashboard() {
                                                 <TableCell>{card.copiesAvailable ?? 'ထ'}</TableCell>
                                                 <TableCell>{card.eventId ? events.find(e => e.id === card.eventId)?.name || 'Evento não encontrado' : '-'}</TableCell>
                                                 <TableCell className="text-right">
-                                                    <Button variant="ghost" size="icon" onClick={() => setEditingCard(card)} className="hover:text-primary" disabled={isLoading}><Edit3 className="h-4 w-4"/></Button>
+                                                    <Button variant="ghost" size="icon" onClick={() => setEditingCard(card)} className="hover:text-primary" disabled={isFormProcessing}><Edit3 className="h-4 w-4"/></Button>
                                                      <AlertDialog>
                                                         <AlertDialogTrigger asChild>
-                                                            <Button variant="ghost" size="icon" className="hover:text-destructive" disabled={isLoading}><Trash2 className="h-4 w-4"/></Button>
+                                                            <Button variant="ghost" size="icon" className="hover:text-destructive" disabled={isFormProcessing}><Trash2 className="h-4 w-4"/></Button>
                                                         </AlertDialogTrigger>
                                                         <AlertDialogContent>
                                                             <AlertDialogHeader><AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle><AlertDialogDescription>Tem certeza que deseja excluir a carta "{card.name}"? Esta ação não pode ser desfeita.</AlertDialogDescription></AlertDialogHeader>
@@ -476,6 +487,9 @@ export function AdminDashboard() {
                                                 </TableCell>
                                             </TableRow>
                                         ))}
+                                        {cards.length === 0 && !isInitialLoading && (
+                                            <TableRow><TableCell colSpan={8} className="text-center py-4">Nenhuma carta registrada.</TableCell></TableRow>
+                                        )}
                                     </TableBody>
                                 </Table>
                              </ScrollArea>
@@ -503,8 +517,8 @@ export function AdminDashboard() {
                                      <FormField control={eventForm.control} name="bonusMultiplier" render={({ field }) => (<FormItem><FormLabel>Multiplicador de Bônus de IFCoins</FormLabel><FormControl><Input type="number" min="1" step="0.1" placeholder="Ex: 1.5 (para 50% a mais)" {...field} /></FormControl><FormDescription className="text-xs">Quantas vezes mais moedas serão ganhas durante o evento (ex: 2 para o dobro).</FormDescription><FormMessage /></FormItem>)} />
                                     {/* TODO: Add multi-select for linked cards if needed later. For now, it's just in schema. */}
                                     <div className="flex gap-2">
-                                        <Button type="submit" disabled={isLoading} className="bg-accent hover:bg-accent/90 text-accent-foreground"><CalendarPlus className="mr-2 h-4 w-4" /> {editingEvent ? "Salvar Alterações" : "Salvar Evento"}</Button>
-                                        {editingEvent && <Button variant="outline" onClick={() => { setEditingEvent(null); eventForm.reset({ name: "", description: "", imageUrl: "https://placehold.co/400x200.png", startDate: undefined, endDate: undefined, bonusMultiplier: 1, linkedCards: []}); }} disabled={isLoading}>Cancelar Edição</Button>}
+                                        <Button type="submit" disabled={isFormProcessing} className="bg-accent hover:bg-accent/90 text-accent-foreground"><CalendarPlus className="mr-2 h-4 w-4" /> {editingEvent ? "Salvar Alterações" : "Salvar Evento"}</Button>
+                                        {editingEvent && <Button variant="outline" onClick={() => { setEditingEvent(null); eventForm.reset({ name: "", description: "", imageUrl: "https://placehold.co/400x200.png", startDate: undefined, endDate: undefined, bonusMultiplier: 1, linkedCards: []}); }} disabled={isFormProcessing}>Cancelar Edição</Button>}
                                     </div>
                                 </form>
                              </Form>
@@ -526,10 +540,10 @@ export function AdminDashboard() {
                                                 <TableCell className="text-center font-semibold">{event.bonusMultiplier}x</TableCell>
                                                 <TableCell><Badge variant={status === 'Ativo' ? 'default' : status === 'Agendado' ? 'secondary' : 'outline'} className={status === 'Ativo' ? "bg-green-500 text-white" : ""}>{status}</Badge></TableCell>
                                                 <TableCell className="text-right">
-                                                    <Button variant="ghost" size="icon" onClick={() => setEditingEvent(event)} className="hover:text-primary" disabled={isLoading}><Edit3 className="h-4 w-4"/></Button>
+                                                    <Button variant="ghost" size="icon" onClick={() => setEditingEvent(event)} className="hover:text-primary" disabled={isFormProcessing}><Edit3 className="h-4 w-4"/></Button>
                                                     <AlertDialog>
                                                         <AlertDialogTrigger asChild>
-                                                            <Button variant="ghost" size="icon" className="hover:text-destructive" disabled={isLoading}><Trash2 className="h-4 w-4"/></Button>
+                                                            <Button variant="ghost" size="icon" className="hover:text-destructive" disabled={isFormProcessing}><Trash2 className="h-4 w-4"/></Button>
                                                         </AlertDialogTrigger>
                                                         <AlertDialogContent>
                                                             <AlertDialogHeader><AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle><AlertDialogDescription>Tem certeza que deseja excluir o evento "{event.name}"? Esta ação não pode ser desfeita.</AlertDialogDescription></AlertDialogHeader>
@@ -539,6 +553,9 @@ export function AdminDashboard() {
                                                 </TableCell>
                                             </TableRow>
                                         )})}
+                                        {events.length === 0 && !isInitialLoading && (
+                                            <TableRow><TableCell colSpan={6} className="text-center py-4">Nenhum evento encontrado.</TableCell></TableRow>
+                                        )}
                                     </TableBody>
                                 </Table>
                             </ScrollArea>
