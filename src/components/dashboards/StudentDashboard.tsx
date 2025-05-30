@@ -6,12 +6,12 @@ import React, { useState, useEffect } from 'react'; // Import React
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Badge } from "@/components/ui/badge"; // Make sure Badge is imported
+import { Badge } from "@/components/ui/badge";
 import { Award, Coins, History, Repeat, ShoppingBag, Users, Star, Loader2, CalendarDays, Gift } from "lucide-react";
 import Image from 'next/image';
 import { auth, db } from '@/lib/firebase/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, getDoc, onSnapshot, collection, query, where, Timestamp, getDocs, limit } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot, collection, query, where, Timestamp, getDocs, limit, orderBy } from 'firebase/firestore';
 
 interface StudentProfile {
     name: string;
@@ -88,23 +88,16 @@ export function StudentDashboard() {
         const fetchExtraData = async () => {
             setIsLoadingExtra(true);
             try {
-                // Total System Cards
                 const cardsCollectionRef = collection(db, "cards");
-                const cardsSnapshot = await getDocs(cardsCollectionRef);
-                setTotalSystemCards(cardsSnapshot.size);
+                
+                // Fetch all cards for random selection and total count
+                const allCardsSnapshot = await getDocs(cardsCollectionRef);
+                setTotalSystemCards(allCardsSnapshot.size);
 
-                // Featured Card (try to get a Legendary or Mythic)
-                const featuredQuery = query(cardsCollectionRef, where("rarity", "in", ["Lendário", "Mítico"]), limit(1));
-                const featuredSnapshot = await getDocs(featuredQuery);
-                if (!featuredSnapshot.empty) {
-                    setFeaturedCard({ id: featuredSnapshot.docs[0].id, ...featuredSnapshot.docs[0].data() } as CardData);
-                } else {
-                    // Fallback: get any card if no Legendary/Mythic
-                    const anyCardQuery = query(cardsCollectionRef, limit(1));
-                    const anyCardSnapshot = await getDocs(anyCardQuery);
-                    if (!anyCardSnapshot.empty) {
-                        setFeaturedCard({ id: anyCardSnapshot.docs[0].id, ...anyCardSnapshot.docs[0].data() } as CardData);
-                    }
+                if (!allCardsSnapshot.empty) {
+                    const randomIndex = Math.floor(Math.random() * allCardsSnapshot.docs.length);
+                    const randomCardDoc = allCardsSnapshot.docs[randomIndex];
+                    setFeaturedCard({ id: randomCardDoc.id, ...randomCardDoc.data() } as CardData);
                 }
 
                 // Current Event
@@ -113,17 +106,17 @@ export function StudentDashboard() {
                 const activeEventQuery = query(
                     eventsCollectionRef,
                     where("startDate", "<=", now),
-                    orderBy("startDate", "desc"), // In case of overlap, pick most recent start
-                    limit(1) // We only want one active event displayed
+                    where("endDate", ">=", now), // Event must also not have ended
+                    orderBy("startDate", "desc"), // If multiple are active, pick the one that started most recently
+                    limit(1)
                 );
                 const activeEventSnapshot = await getDocs(activeEventQuery);
                 
-                activeEventSnapshot.forEach(docSnap => {
-                    const event = { id: docSnap.id, ...docSnap.data() } as EventData;
-                    if (event.endDate >= now) { // Check if end date is also valid
-                        setCurrentEvent(event);
-                    }
-                });
+                if (!activeEventSnapshot.empty) {
+                     setCurrentEvent({ id: activeEventSnapshot.docs[0].id, ...activeEventSnapshot.docs[0].data() } as EventData);
+                } else {
+                    setCurrentEvent(null); // No active event found
+                }
 
             } catch (error) {
                 console.error("Error fetching extra dashboard data:", error);
@@ -222,24 +215,7 @@ export function StudentDashboard() {
                         <CardDescription>Suas últimas ações no IFCoins</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        {/* Placeholder for now */}
                         <p className="text-sm text-muted-foreground">Histórico de atividades em breve.</p>
-                        {/* 
-                        <ul className="space-y-4">
-                            {defaultStudentData.recentActivity.map((activity, index) => (
-                                <li key={index} className="flex items-center gap-4">
-                                    <div className="p-2 bg-muted rounded-full">
-                                        {activity.icon}
-                                    </div>
-                                    <div className="flex-1">
-                                        <p className="text-sm">{activity.description}</p>
-                                        <p className="text-xs text-muted-foreground">{activity.time}</p>
-                                    </div>
-                                </li>
-                            ))}
-                             {defaultStudentData.recentActivity.length === 0 && <p className="text-sm text-muted-foreground">Nenhuma atividade recente.</p>}
-                        </ul>
-                        */}
                     </CardContent>
                 </Card>
 
