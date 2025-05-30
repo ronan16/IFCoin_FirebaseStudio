@@ -1,9 +1,10 @@
+
 // src/app/dashboard/layout.tsx
 "use client";
 
 import * as React from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation"; // Added useRouter
+import { usePathname, useRouter } from "next/navigation"; 
 import {
   Home,
   ShoppingBag,
@@ -17,8 +18,7 @@ import {
   Menu,
   Coins,
   Bell,
-  UserCircle, // Default icon
-  Loader2, // Added Loader2 import
+  Loader2, 
 } from "lucide-react";
 
 import {
@@ -46,10 +46,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-import { auth, db } from "@/lib/firebase/firebase"; // Import auth and db
-import { onAuthStateChanged, signOut, User as FirebaseUser } from "firebase/auth"; // Import signOut
+import { auth, db } from "@/lib/firebase/firebase"; 
+import { onAuthStateChanged, signOut, User as FirebaseUser } from "firebase/auth"; 
 import { doc, getDoc } from "firebase/firestore";
-import { Skeleton } from "@/components/ui/skeleton";
 
 
 type NavItem = {
@@ -67,7 +66,7 @@ const navItems: NavItem[] = [
   { href: "/dashboard/trades", icon: Repeat, label: "Trocas", roles: ['student'] },
   { href: "/dashboard/events", icon: Calendar, label: "Eventos", roles: ['student', 'teacher', 'staff', 'admin'] },
   { href: "/dashboard/rankings", icon: Trophy, label: "Rankings", roles: ['student', 'teacher', 'staff', 'admin'] },
-  { href: "/dashboard/teacher", icon: Users, label: "Painel Professor", roles: ['teacher', 'staff'] }, // Keep for potential future use
+  { href: "/dashboard/teacher", icon: Users, label: "Painel Professor", roles: ['teacher', 'staff'] }, 
   { href: "/dashboard/admin", icon: UserCog, label: "Painel Admin", roles: ['admin'] },
 ];
 
@@ -78,6 +77,7 @@ interface UserProfile {
   avatarUrl?: string;
   initials: string;
   coins?: number;
+  course?: string; // Added course
   uid: string;
 }
 
@@ -106,19 +106,19 @@ export default function DashboardLayout({
             name: data.name || "Usuário",
             email: user.email || "email@desconhecido.com",
             role: data.role || "student",
+            course: data.course || "Não definido", // Fetch course
             initials: (data.name || "U").substring(0, 2).toUpperCase(),
             coins: data.coins || 0,
-            avatarUrl: data.avatarUrl, // Assuming you might add avatarUrl to Firestore
+            avatarUrl: data.avatarUrl, 
           });
         } else {
-          // Handle case where user exists in Auth but not Firestore (e.g., manual creation or error)
-           // Fallback if Firestore profile is missing (especially for hardcoded admin)
           if (user.email === 'admin@admin.com') {
             setUserProfile({
                 uid: user.uid,
                 name: "Admin Master",
                 email: user.email,
                 role: 'admin',
+                course: "Administração",
                 initials: "AM",
                 coins: 9999,
              });
@@ -127,7 +127,8 @@ export default function DashboardLayout({
                 uid: user.uid,
                 name: user.displayName || "Usuário",
                 email: user.email || "desconhecido@ifpr.edu.br",
-                role: 'student', // Default to student
+                role: 'student', 
+                course: "Não definido",
                 initials: (user.displayName || "U").substring(0,1).toUpperCase(),
                 coins: 0,
             });
@@ -137,7 +138,7 @@ export default function DashboardLayout({
       } else {
         setCurrentUser(null);
         setUserProfile(null);
-        router.push("/"); // Redirect to login if not authenticated
+        router.push("/"); 
       }
       setIsLoadingAuth(false);
     });
@@ -147,15 +148,13 @@ export default function DashboardLayout({
   const handleLogout = async () => {
     try {
       await signOut(auth);
-      router.push("/"); // Redirect to login page
+      router.push("/"); 
     } catch (error) {
       console.error("Error signing out:", error);
-      // Handle error (e.g., show toast)
     }
   };
 
   if (isLoadingAuth || !userProfile) {
-    // Basic Loading UI - can be replaced with a proper Skeleton loader for the whole layout
     return (
         <div className="flex h-screen items-center justify-center">
             <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -249,21 +248,13 @@ export default function DashboardLayout({
                 <DropdownMenuTrigger asChild>
                    <Button variant="ghost" size="icon" className="rounded-full relative">
                       <Bell className="h-5 w-5" />
-                      {/* Placeholder for notification count, replace with actual logic */}
-                      {/* <Badge className="absolute -top-1 -right-1 h-4 w-4 justify-center p-0 text-xs bg-destructive text-destructive-foreground">3</Badge> */}
                       <span className="sr-only">Notificações</span>
                    </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                    <DropdownMenuLabel>Notificações</DropdownMenuLabel>
                    <DropdownMenuSeparator />
-                   {/* Placeholder notifications */}
                    <DropdownMenuItem>Nenhuma notificação nova.</DropdownMenuItem>
-                   {/* <DropdownMenuItem>Nova proposta de troca recebida!</DropdownMenuItem>
-                   <DropdownMenuItem>Você ganhou 10 IFCoins!</DropdownMenuItem>
-                   <DropdownMenuItem>Carta Lendária adicionada à Loja!</DropdownMenuItem> */}
-                   {/* <DropdownMenuSeparator />
-                   <DropdownMenuItem>Ver todas</DropdownMenuItem> */}
                 </DropdownMenuContent>
              </DropdownMenu>
 
@@ -283,19 +274,15 @@ export default function DashboardLayout({
                          <p className="text-xs leading-none text-muted-foreground">
                             {userProfile.email}
                          </p>
+                         {userProfile.course && (
+                            <p className="text-xs leading-none text-muted-foreground">
+                                Curso: {userProfile.course}
+                            </p>
+                         )}
                          <Badge variant="outline" className="w-fit mt-1 capitalize">{userProfile.role}</Badge>
                       </div>
                    </DropdownMenuLabel>
                    <DropdownMenuSeparator />
-                   {/* <DropdownMenuItem>
-                      <UserCog className="mr-2 h-4 w-4" />
-                      <span>Perfil</span>
-                   </DropdownMenuItem>
-                   <DropdownMenuItem>
-                      <Users className="mr-2 h-4 w-4" />
-                      <span>Configurações</span>
-                   </DropdownMenuItem>
-                   <DropdownMenuSeparator /> */}
                    <DropdownMenuItem onClick={handleLogout}>
                       <LogOut className="mr-2 h-4 w-4" />
                       <span>Sair</span>

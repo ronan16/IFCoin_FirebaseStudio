@@ -1,3 +1,4 @@
+
 "use client";
 
 import * as React from "react";
@@ -14,6 +15,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 import { auth, db, serverTimestamp } from "@/lib/firebase/firebase"; // Import db and serverTimestamp
@@ -21,10 +23,13 @@ import { createUserWithEmailAndPassword } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore"; // Import doc and setDoc
 import { useRouter } from "next/navigation";
 
+const coursesList = ["Informática", "Eletrotécnica", "Agroecologia", "Agropecuária", "Sistemas de Informação", "Eng. Agronômica", "Física"];
+
 const formSchema = z.object({
   name: z.string().min(3, { message: "O nome deve ter pelo menos 3 caracteres." }),
   ra: z.string().regex(/^\d+$/, { message: "RA deve conter apenas números." }).min(5, { message: "RA deve ter pelo menos 5 dígitos." }),
   email: z.string().email({ message: "Por favor, insira um email válido." }),
+  course: z.string().min(1, { message: "Selecione um curso." }),
   password: z.string().min(6, { message: "A senha deve ter pelo menos 6 caracteres." }),
   confirmPassword: z.string().min(6, { message: "A confirmação de senha deve ter pelo menos 6 caracteres." }),
 }).refine((data) => data.password === data.confirmPassword, {
@@ -43,6 +48,7 @@ export function RegisterForm() {
       name: "",
       ra: "",
       email: "",
+      course: "",
       password: "",
       confirmPassword: "",
     },
@@ -62,6 +68,7 @@ export function RegisterForm() {
         name: values.name,
         ra: values.ra,
         email: values.email,
+        course: values.course,
         role: "student", // Default role
         createdAt: serverTimestamp(),
         coins: 0, // Initial coins
@@ -131,6 +138,30 @@ export function RegisterForm() {
               <FormControl>
                 <Input placeholder="seuemail@ifpr.edu.br" {...field} disabled={isLoading} />
               </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+         <FormField
+          control={form.control}
+          name="course"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Curso</FormLabel>
+              <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isLoading}>
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione seu curso" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {coursesList.map((course) => (
+                    <SelectItem key={course} value={course}>
+                      {course}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <FormMessage />
             </FormItem>
           )}

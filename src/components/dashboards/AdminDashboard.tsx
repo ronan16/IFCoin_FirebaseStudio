@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { UserPlus, CreditCard, CalendarPlus, Settings, BarChart3, Upload, Star, Users, AlertTriangle, Coins, Loader2, Edit3, Trash2, Image as ImageIcon, MinusSquare, Minus } from "lucide-react";
+import { UserPlus, CreditCard, CalendarPlus, Settings, BarChart3, Upload, Star, Users, AlertTriangle, Coins, Loader2, Edit3, Trash2, Image as ImageIcon } from "lucide-react"; // Removed MinusSquare, Minus as they might not be used
 import { useToast } from "@/hooks/use-toast";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, Controller } from "react-hook-form";
@@ -36,6 +36,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
+const coursesList = ["Informática", "Eletrotécnica", "Agroecologia", "Agropecuária", "Sistemas de Informação", "Eng. Agronômica", "Física"];
 
 interface UserData {
     id: string;
@@ -43,8 +44,9 @@ interface UserData {
     ra?: string;
     email: string;
     role: 'student' | 'teacher' | 'admin' | 'staff';
-    status: 'Ativo' | 'Pendente' | 'Inativo';
+    status?: 'Ativo' | 'Pendente' | 'Inativo'; // Status might be derived or manually set
     coins?: number;
+    course?: string; // Added course
 }
 
 interface CardData {
@@ -55,7 +57,7 @@ interface CardData {
     available: boolean;
     copiesAvailable?: number | null;
     eventId?: string | null;
-    price?: number; // Price made optional to align with reset values if needed
+    price?: number;
 }
 
 interface EventData {
@@ -74,8 +76,9 @@ const NO_EVENT_SELECTED_VALUE = "_NONE_";
 
 const studentSchema = z.object({
     name: z.string().min(3, { message: "Nome deve ter pelo menos 3 caracteres." }),
-    ra: z.string().regex(/^\d+$/, { message: "RA deve conter apenas números." }).optional(),
+    ra: z.string().regex(/^\d+$/, { message: "RA deve conter apenas números." }).optional().or(z.literal('')),
     email: z.string().email({ message: "Email inválido." }),
+    course: z.string().min(1, { message: "Selecione um curso." }), // Added course validation
     role: z.enum(['student', 'teacher', 'staff', 'admin']).default('student'),
 });
 
@@ -131,7 +134,7 @@ export function AdminDashboard() {
         }, (error) => {
             console.error("Error fetching users: ", error);
             toast({ title: "Erro ao buscar usuários", description: error.message, variant: "destructive" });
-            setUsersLoaded(true); // Mark as loaded even on error to stop global spinner
+            setUsersLoaded(true);
         });
         return () => unsubscribe();
     }, [toast]);
@@ -184,7 +187,7 @@ export function AdminDashboard() {
         defaultValues: {
             name: "",
             rarity: "Comum",
-            price: undefined, // Use undefined for optional numbers to allow placeholder
+            price: 0,
             imageUrl: "https://placehold.co/200x280.png",
             available: true,
             copiesAvailable: null,
@@ -207,19 +210,19 @@ export function AdminDashboard() {
 
     const userForm = useForm<z.infer<typeof studentSchema>>({
         resolver: zodResolver(studentSchema),
-        defaultValues: { name: "", ra: "", email: "", role: "student" },
+        defaultValues: { name: "", ra: "", email: "", course: "", role: "student" },
     });
 
     useEffect(() => {
         if (editingCard) {
             cardForm.reset({
                 ...editingCard,
-                price: editingCard.price === undefined || editingCard.price === null || isNaN(editingCard.price) ? undefined : Number(editingCard.price),
+                price: editingCard.price === undefined || editingCard.price === null || isNaN(editingCard.price) ? 0 : Number(editingCard.price),
                 copiesAvailable: editingCard.copiesAvailable === undefined ? null : editingCard.copiesAvailable,
                 eventId: editingCard.eventId === undefined || editingCard.eventId === NO_EVENT_SELECTED_VALUE ? null : editingCard.eventId,
             });
         } else {
-             cardForm.reset({ name: "", rarity: "Comum", price: undefined, imageUrl: "https://placehold.co/200x280.png", available: true, copiesAvailable: null, eventId: null });
+             cardForm.reset({ name: "", rarity: "Comum", price: 0, imageUrl: "https://placehold.co/200x280.png", available: true, copiesAvailable: null, eventId: null });
         }
     }, [editingCard, cardForm]);
 
@@ -237,7 +240,15 @@ export function AdminDashboard() {
     }, [editingEvent, eventForm]);
 
     useEffect(() => {
-        if (editingUser) userForm.reset(editingUser); else userForm.reset({ name: "", ra: "", email: "", role: "student" });
+        if (editingUser) {
+            userForm.reset({
+                ...editingUser,
+                ra: editingUser.ra || "", // Ensure RA is not undefined for the form
+                course: editingUser.course || "", // Ensure course is not undefined
+            });
+        } else {
+            userForm.reset({ name: "", ra: "", email: "", course: "", role: "student" });
+        }
     }, [editingUser, userForm]);
 
 
@@ -246,7 +257,7 @@ export function AdminDashboard() {
         try {
             const dataToSave = {
                 ...values,
-                price: values.price === undefined || values.price === null || isNaN(values.price) ? 0 : Number(values.price), // Default to 0 if not provided
+                price: values.price === undefined || values.price === null || isNaN(values.price) ? 0 : Number(values.price),
                 copiesAvailable: values.copiesAvailable === undefined ? null : values.copiesAvailable,
                 eventId: values.eventId === undefined || values.eventId === NO_EVENT_SELECTED_VALUE ? null : values.eventId,
             };
@@ -258,7 +269,7 @@ export function AdminDashboard() {
                 await addDoc(collection(db, "cards"), dataToSave);
                 toast({ title: "Carta Registrada!", description: `A carta "${values.name}" foi adicionada.` });
             }
-            cardForm.reset({ name: "", rarity: "Comum", price: undefined, imageUrl: "https://placehold.co/200x280.png", available: true, copiesAvailable: null, eventId: null });
+            cardForm.reset({ name: "", rarity: "Comum", price: 0, imageUrl: "https://placehold.co/200x280.png", available: true, copiesAvailable: null, eventId: null });
             setEditingCard(null);
         } catch (error: any) {
             console.error("Card submission error: ", error);
@@ -326,13 +337,14 @@ export function AdminDashboard() {
                     name: values.name,
                     ra: values.ra,
                     email: values.email,
+                    course: values.course,
                     role: values.role,
                 });
                 toast({ title: "Usuário Atualizado!", description: `Os dados de "${values.name}" foram atualizados.` });
             } else {
                 toast({ title: "Ação não suportada", description: "Criação de novos usuários aqui não é recomendada. Use a tela de registro ou modifique o usuário no Firestore.", variant: "destructive" });
             }
-            userForm.reset({ name: "", ra: "", email: "", role: "student" });
+            userForm.reset({ name: "", ra: "", email: "", course: "", role: "student" });
             setEditingUser(null);
         } catch (error: any)
 {
@@ -382,10 +394,34 @@ export function AdminDashboard() {
                                          <FormField control={userForm.control} name="name" render={({ field }) => (<FormItem><FormLabel>Nome</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
                                          <FormField control={userForm.control} name="email" render={({ field }) => (<FormItem><FormLabel>Email</FormLabel><FormControl><Input type="email" {...field} /></FormControl><FormMessage /></FormItem>)} />
                                          <FormField control={userForm.control} name="ra" render={({ field }) => (<FormItem><FormLabel>RA</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
-                                         <FormField control={userForm.control} name="role" render={({ field }) => (<FormItem><FormLabel>Função</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent><SelectItem value="student">Aluno</SelectItem><SelectItem value="teacher">Professor</SelectItem><SelectItem value="staff">Servidor</SelectItem><SelectItem value="admin">Admin</SelectItem></SelectContent></Select><FormMessage /></FormItem>)} />
+                                         <FormField
+                                            control={userForm.control}
+                                            name="course"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                <FormLabel>Curso</FormLabel>
+                                                <Select onValueChange={field.onChange} value={field.value}>
+                                                    <FormControl>
+                                                    <SelectTrigger>
+                                                        <SelectValue placeholder="Selecione o curso" />
+                                                    </SelectTrigger>
+                                                    </FormControl>
+                                                    <SelectContent>
+                                                    {coursesList.map((courseName) => (
+                                                        <SelectItem key={courseName} value={courseName}>
+                                                        {courseName}
+                                                        </SelectItem>
+                                                    ))}
+                                                    </SelectContent>
+                                                </Select>
+                                                <FormMessage />
+                                                </FormItem>
+                                            )}
+                                            />
+                                         <FormField control={userForm.control} name="role" render={({ field }) => (<FormItem><FormLabel>Função</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent><SelectItem value="student">Aluno</SelectItem><SelectItem value="teacher">Professor</SelectItem><SelectItem value="staff">Servidor</SelectItem><SelectItem value="admin">Admin</SelectItem></SelectContent></Select><FormMessage /></FormItem>)} />
                                         <div className="flex gap-2">
                                             <Button type="submit" disabled={isFormProcessing} className="bg-accent hover:bg-accent/90 text-accent-foreground"> {isFormProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <UserPlus className="mr-2 h-4 w-4" />} Salvar Usuário</Button>
-                                            <Button variant="outline" onClick={() => { setEditingUser(null); userForm.reset({ name: "", ra: "", email: "", role: "student" });}} disabled={isFormProcessing}>Cancelar</Button>
+                                            <Button variant="outline" onClick={() => { setEditingUser(null); userForm.reset({ name: "", ra: "", email: "", course: "", role: "student" });}} disabled={isFormProcessing}>Cancelar</Button>
                                         </div>
                                     </form>
                                 </Form>
@@ -398,7 +434,7 @@ export function AdminDashboard() {
                                         {isFormProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Upload className="mr-2 h-4 w-4" />} Enviar Arquivo (Em Breve)
                                      </Button>
                                 </div>
-                                <p className="text-xs text-muted-foreground mt-1">Formato esperado: RA, Email, Nome Completo, Turma (Opcional)</p>
+                                <p className="text-xs text-muted-foreground mt-1">Formato esperado: RA, Email, Nome Completo, Curso, Turma (Opcional)</p>
                             </div>
                             <Separator />
                              <h3 className="text-lg font-semibold">Usuários Registrados ({users.length})</h3>
@@ -409,6 +445,7 @@ export function AdminDashboard() {
                                             <TableHead>Nome</TableHead>
                                             <TableHead>Email</TableHead>
                                             <TableHead>RA</TableHead>
+                                            <TableHead>Curso</TableHead>
                                             <TableHead>Função</TableHead>
                                             <TableHead className="text-right">Ações</TableHead>
                                         </TableRow>
@@ -419,6 +456,7 @@ export function AdminDashboard() {
                                                 <TableCell className="font-medium">{user.name}</TableCell>
                                                 <TableCell>{user.email}</TableCell>
                                                 <TableCell>{user.ra || '-'}</TableCell>
+                                                <TableCell>{user.course || '-'}</TableCell>
                                                 <TableCell><Badge variant="secondary" className="capitalize">{user.role}</Badge></TableCell>
                                                 <TableCell className="text-right">
                                                     <Button variant="ghost" size="icon" onClick={() => setEditingUser(user)} className="hover:text-primary" disabled={isFormProcessing}>
@@ -428,7 +466,7 @@ export function AdminDashboard() {
                                             </TableRow>
                                         ))}
                                         {users.length === 0 && !isInitialLoading && (
-                                            <TableRow><TableCell colSpan={5} className="text-center py-4">Nenhum usuário encontrado.</TableCell></TableRow>
+                                            <TableRow><TableCell colSpan={6} className="text-center py-4">Nenhum usuário encontrado.</TableCell></TableRow>
                                         )}
                                     </TableBody>
                                 </Table>
@@ -463,6 +501,7 @@ export function AdminDashboard() {
                                                         value={(field.value !== undefined && field.value !== null && !isNaN(field.value as number)) ? String(field.value) : ''}
                                                         onChange={e => {
                                                             const stringValue = e.target.value;
+                                                            // Pass string or undefined, Zod will coerce
                                                             field.onChange(stringValue === '' ? undefined : stringValue);
                                                         }}
                                                     />
@@ -527,7 +566,7 @@ export function AdminDashboard() {
                                     <FormField control={cardForm.control} name="available" render={({ field }) => (<FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm bg-background"><div className="space-y-0.5"><FormLabel>Disponível na Loja Geral?</FormLabel><FormDescription className="text-xs">Se esta carta pode ser comprada na loja (mesmo fora de evento, se não houver evento vinculado).</FormDescription></div><FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl></FormItem>)} />
                                     <div className="flex gap-2">
                                         <Button type="submit" disabled={isFormProcessing} className="bg-accent hover:bg-accent/90 text-accent-foreground"> {isFormProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <CreditCard className="mr-2 h-4 w-4" />} {editingCard ? "Salvar Alterações" : "Adicionar Carta"}</Button>
-                                        {editingCard && <Button variant="outline" onClick={() => { setEditingCard(null); cardForm.reset({ name: "", rarity: "Comum", price: undefined, imageUrl: "https://placehold.co/200x280.png", available: true, copiesAvailable: null, eventId: null }); }} disabled={isFormProcessing}>Cancelar Edição</Button>}
+                                        {editingCard && <Button variant="outline" onClick={() => { setEditingCard(null); cardForm.reset({ name: "", rarity: "Comum", price: 0, imageUrl: "https://placehold.co/200x280.png", available: true, copiesAvailable: null, eventId: null }); }} disabled={isFormProcessing}>Cancelar Edição</Button>}
                                     </div>
                                 </form>
                             </Form>
@@ -757,6 +796,3 @@ export function AdminDashboard() {
         </div>
     );
 }
-
-
-      
