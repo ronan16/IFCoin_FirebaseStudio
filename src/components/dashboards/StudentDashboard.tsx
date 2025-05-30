@@ -6,7 +6,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Badge } from "@/components/ui/badge";
+import { Badge } from "@/components/ui/badge"; // Ensure Badge is imported
 import { Award, Coins, History, Repeat, ShoppingBag, Users, Star, Loader2, CalendarDays, Gift } from "lucide-react";
 import Image from 'next/image';
 import { auth, db } from '@/lib/firebase/firebase';
@@ -106,41 +106,49 @@ export function StudentDashboard() {
                 try {
                     const now = Timestamp.now();
                     const eventsCollectionRef = collection(db, "events");
-                    console.log("[StudentDashboard] Fetching active event. Current Timestamp:", now.toDate().toISOString());
+                    console.log("[StudentDashboard] Fetching active events. Current Timestamp:", now.toDate().toISOString());
 
-                    const activeEventQuery = query(
+                    // Simpler query: find any active event based on date range
+                    const activeEventsQuery = query(
                         eventsCollectionRef,
                         where("startDate", "<=", now),
-                        where("endDate", ">=", now),
-                        orderBy("startDate", "desc"),
-                        limit(1)
+                        where("endDate", ">=", now)
                     );
 
-                    const activeEventSnapshot = await getDocs(activeEventQuery);
-                    console.log("[StudentDashboard] Active event query snapshot size:", activeEventSnapshot.size);
+                    const activeEventsSnapshot = await getDocs(activeEventsQuery);
+                    console.log("[StudentDashboard] Active events query snapshot size:", activeEventsSnapshot.size);
 
-                    if (!activeEventSnapshot.empty) {
-                        const eventDoc = activeEventSnapshot.docs[0];
-                        const eventData = eventDoc.data();
-                        console.log("[StudentDashboard] Found active event document:", eventDoc.id, eventData);
+                    if (!activeEventsSnapshot.empty) {
+                        // Map to full event data objects
+                        const allMatchingEventsData = activeEventsSnapshot.docs.map(docSnap => ({
+                            id: docSnap.id,
+                            ...docSnap.data()
+                        }));
+
+                        // Sort client-side to find the one that started most recently
+                        allMatchingEventsData.sort((a, b) => {
+                            const dateA = a.startDate instanceof Timestamp ? a.startDate.toMillis() : new Date(a.startDate as any).getTime();
+                            const dateB = b.startDate instanceof Timestamp ? b.startDate.toMillis() : new Date(b.startDate as any).getTime();
+                            return dateB - dateA; // descending (most recent first)
+                        });
                         
-                        // Ensure Timestamps are correctly handled (Firestore SDK usually does this)
-                        const startDate = eventData.startDate instanceof Timestamp ? eventData.startDate : Timestamp.fromDate(new Date(eventData.startDate));
-                        const endDate = eventData.endDate instanceof Timestamp ? eventData.endDate : Timestamp.fromDate(new Date(eventData.endDate));
-
-                        console.log(`[StudentDashboard] Event "${eventData.name}" Start: ${startDate.toDate().toISOString()}, End: ${endDate.toDate().toISOString()}`);
+                        const eventData = allMatchingEventsData[0]; // Get the most recent one
+                        console.log("[StudentDashboard] Found most recent active event document:", eventData.id, eventData);
+                        
+                        const startDate = eventData.startDate instanceof Timestamp ? eventData.startDate : Timestamp.fromDate(new Date(eventData.startDate as any));
+                        const endDate = eventData.endDate instanceof Timestamp ? eventData.endDate : Timestamp.fromDate(new Date(eventData.endDate as any));
 
                         setCurrentEvent({
-                            id: eventDoc.id,
-                            name: eventData.name,
+                            id: eventData.id,
+                            name: eventData.name as string,
                             startDate: startDate,
                             endDate: endDate,
-                            bonusMultiplier: eventData.bonusMultiplier,
-                            description: eventData.description,
-                            imageUrl: eventData.imageUrl,
-                        } as EventData);
+                            bonusMultiplier: eventData.bonusMultiplier as number,
+                            description: eventData.description as string | undefined,
+                            imageUrl: eventData.imageUrl as string | undefined,
+                        });
                     } else {
-                        console.log("[StudentDashboard] No active event found by query.");
+                        console.log("[StudentDashboard] No active events found by query.");
                         setCurrentEvent(null);
                     }
                 } catch (eventError) {
@@ -155,10 +163,10 @@ export function StudentDashboard() {
             }
         };
 
-        if (studentProfile) { // Only fetch extra data if a student is logged in
+        if (studentProfile) { 
              fetchExtraData();
         } else {
-            setIsLoadingExtra(false); // No student, no extra data to load
+            setIsLoadingExtra(false); 
             setTotalSystemCards(0);
             setFeaturedCard(null);
             setCurrentEvent(null);
