@@ -70,6 +70,7 @@ interface EventData {
     linkedCards?: string[];
 }
 
+const NO_EVENT_SELECTED_VALUE = "_NO_EVENT_";
 
 const studentSchema = z.object({
     name: z.string().min(3, { message: "Nome deve ter pelo menos 3 caracteres." }),
@@ -85,7 +86,7 @@ const cardSchema = z.object({
     imageUrl: z.string().url("URL da imagem inválida.").default("https://placehold.co/200x280.png"),
     available: z.boolean().default(true),
     copiesAvailable: z.coerce.number().int("Deve ser um número inteiro.").positive("Deve ser positivo.").optional().nullable().transform(val => val === undefined || val === null || isNaN(val) ? null : Number(val)),
-    eventId: z.string().optional().nullable().transform(val => val === "" ? null : val), // Treat empty string as null
+    eventId: z.string().optional().nullable().transform(val => (val === "" || val === undefined) ? null : val),
 });
 
 const eventSchema = z.object({
@@ -105,8 +106,8 @@ const eventSchema = z.object({
 export function AdminDashboard() {
     const { toast } = useToast();
     const [activeTab, setActiveTab] = useState('users');
-    const [isInitialLoading, setIsInitialLoading] = useState(true); // For overall page data
-    const [isFormProcessing, setIsFormProcessing] = useState(false); // For form submissions, deletions etc.
+    const [isInitialLoading, setIsInitialLoading] = useState(true);
+    const [isFormProcessing, setIsFormProcessing] = useState(false);
 
     const [users, setUsers] = useState<UserData[]>([]);
     const [cards, setCards] = useState<CardData[]>([]);
@@ -130,7 +131,7 @@ export function AdminDashboard() {
         }, (error) => {
             console.error("Error fetching users: ", error);
             toast({ title: "Erro ao buscar usuários", description: error.message, variant: "destructive" });
-            setUsersLoaded(true);
+            setUsersLoaded(true); // Still set to true to allow page to render content
         });
         return () => unsubscribe();
     }, [toast]);
@@ -325,11 +326,14 @@ export function AdminDashboard() {
                 });
                 toast({ title: "Usuário Atualizado!", description: `Os dados de "${values.name}" foram atualizados.` });
             } else {
-                toast({ title: "Ação não suportada", description: "Criação de novos usuários deve ser feita pela tela de registro.", variant: "destructive" });
+                // User creation via admin panel is usually more complex (e.g. needs password setting flow)
+                // For now, rely on standard registration or direct Firestore manipulation for new user roles.
+                toast({ title: "Ação não suportada", description: "Criação de novos usuários aqui não é recomendada. Use a tela de registro ou modifique o usuário no Firestore.", variant: "destructive" });
             }
             userForm.reset({ name: "", ra: "", email: "", role: "student" });
             setEditingUser(null);
-        } catch (error: any) {
+        } catch (error: any)
+{
             toast({ title: "Erro ao Salvar Usuário", description: error.message, variant: "destructive" });
         } finally {
             setIsFormProcessing(false);
@@ -337,13 +341,18 @@ export function AdminDashboard() {
     }
 
      async function handleStudentRegistration(data: any) {
+        // This is a placeholder for bulk registration.
+        // Actual implementation would involve parsing CSV, validating, and creating users/sending invites.
         console.log("Registering students from CSV (placeholder):", data);
+        setIsFormProcessing(true);
         await new Promise(resolve => setTimeout(resolve, 1500));
+        setIsFormProcessing(false);
         toast({ title: "Funcionalidade em Desenvolvimento", description: "Upload de CSV para pré-registro será implementado." });
      }
      
      const getEventStatus = (event: EventData): 'Ativo' | 'Agendado' | 'Concluído' => {
         const now = new Date();
+        // Ensure startDate and endDate are Date objects
         const startDate = event.startDate instanceof Date ? event.startDate : new Date(event.startDate);
         const endDate = event.endDate instanceof Date ? event.endDate : new Date(event.endDate);
 
@@ -376,7 +385,7 @@ export function AdminDashboard() {
                                          <FormField control={userForm.control} name="ra" render={({ field }) => (<FormItem><FormLabel>RA</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
                                          <FormField control={userForm.control} name="role" render={({ field }) => (<FormItem><FormLabel>Função</FormLabel><Select onValueChange={field.onChange} defaultValue={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent><SelectItem value="student">Aluno</SelectItem><SelectItem value="teacher">Professor</SelectItem><SelectItem value="staff">Servidor</SelectItem><SelectItem value="admin">Admin</SelectItem></SelectContent></Select><FormMessage /></FormItem>)} />
                                         <div className="flex gap-2">
-                                            <Button type="submit" disabled={isFormProcessing} className="bg-accent hover:bg-accent/90 text-accent-foreground"> <UserPlus className="mr-2 h-4 w-4" /> Salvar Usuário</Button>
+                                            <Button type="submit" disabled={isFormProcessing} className="bg-accent hover:bg-accent/90 text-accent-foreground"> {isFormProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <UserPlus className="mr-2 h-4 w-4" />} Salvar Usuário</Button>
                                             <Button variant="outline" onClick={() => { setEditingUser(null); userForm.reset({ name: "", ra: "", email: "", role: "student" });}} disabled={isFormProcessing}>Cancelar</Button>
                                         </div>
                                     </form>
@@ -385,9 +394,9 @@ export function AdminDashboard() {
                              <div>
                                 <Label htmlFor="student-upload" className="text-sm font-medium">Pré-Registro em Massa (CSV)</Label>
                                 <div className="flex items-center gap-2 mt-1">
-                                     <Input id="student-upload" type="file" accept=".csv" className="flex-1" disabled/>
-                                     <Button size="sm" onClick={() => handleStudentRegistration({})} disabled>
-                                        <Upload className="mr-2 h-4 w-4" /> Enviar Arquivo (Em Breve)
+                                     <Input id="student-upload" type="file" accept=".csv" className="flex-1" disabled={isFormProcessing}/>
+                                     <Button size="sm" onClick={() => handleStudentRegistration({})} disabled={isFormProcessing}>
+                                        {isFormProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Upload className="mr-2 h-4 w-4" />} Enviar Arquivo (Em Breve)
                                      </Button>
                                 </div>
                                 <p className="text-xs text-muted-foreground mt-1">Formato esperado: RA, Email, Nome Completo, Turma (Opcional)</p>
@@ -416,6 +425,7 @@ export function AdminDashboard() {
                                                     <Button variant="ghost" size="icon" onClick={() => setEditingUser(user)} className="hover:text-primary" disabled={isFormProcessing}>
                                                         <Edit3 className="h-4 w-4"/>
                                                     </Button>
+                                                    {/* Delete user might be too destructive, usually disable/archive is better. For now, no delete. */}
                                                 </TableCell>
                                             </TableRow>
                                         ))}
@@ -444,10 +454,42 @@ export function AdminDashboard() {
                                      <FormField control={cardForm.control} name="price" render={({ field }) => (<FormItem><FormLabel>Preço na Loja (IFCoins)</FormLabel><FormControl><Input type="number" placeholder="Ex: 10" {...field} /></FormControl><FormMessage /></FormItem>)} />
                                     <FormField control={cardForm.control} name="imageUrl" render={({ field }) => (<FormItem><FormLabel>URL da Imagem</FormLabel><FormControl><Input type="url" placeholder="https://placehold.co/200x280.png" {...field} /></FormControl><FormDescription className="text-xs">Use https://placehold.co/larguraxaltura.png para placeholders.</FormDescription><FormMessage /></FormItem>)} />
                                     <FormField control={cardForm.control} name="copiesAvailable" render={({ field }) => (<FormItem><FormLabel>Cópias Disponíveis (Opcional)</FormLabel><FormControl><Input type="number" placeholder="Deixe em branco para ilimitado" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? null : Number(e.target.value))} /></FormControl><FormDescription className="text-xs">Para cartas com estoque limitado na loja. Deixe vazio para ilimitado.</FormDescription><FormMessage /></FormItem>)} />
-                                     <FormField control={cardForm.control} name="eventId" render={({ field }) => (<FormItem><FormLabel>Vincular a Evento (Opcional)</FormLabel><Select onValueChange={field.onChange} value={field.value ?? ""}><FormControl><SelectTrigger><SelectValue placeholder="Nenhum evento selecionado" /></SelectTrigger></FormControl><SelectContent><SelectItem value="">Nenhum</SelectItem>{events.map(event => (<SelectItem key={event.id} value={event.id}>{event.name}</SelectItem>))}</SelectContent></Select><FormDescription className="text-xs">Carta disponível na loja apenas durante este evento (se ativo).</FormDescription><FormMessage /></FormItem>)} />
+                                     <FormField
+                                        control={cardForm.control}
+                                        name="eventId"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Vincular a Evento (Opcional)</FormLabel>
+                                                <Select
+                                                    onValueChange={(selectedValue) => {
+                                                        if (selectedValue === NO_EVENT_SELECTED_VALUE) {
+                                                            field.onChange(undefined); 
+                                                        } else {
+                                                            field.onChange(selectedValue);
+                                                        }
+                                                    }}
+                                                    value={field.value || undefined} // Ensures placeholder shows if field.value is null/undefined
+                                                >
+                                                    <FormControl>
+                                                        <SelectTrigger>
+                                                            <SelectValue placeholder="Nenhum evento selecionado" />
+                                                        </SelectTrigger>
+                                                    </FormControl>
+                                                    <SelectContent>
+                                                        <SelectItem value={NO_EVENT_SELECTED_VALUE}>Nenhum</SelectItem>
+                                                        {events.map(event => (
+                                                            <SelectItem key={event.id} value={event.id}>{event.name}</SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                                <FormDescription className="text-xs">Carta disponível na loja apenas durante este evento (se ativo).</FormDescription>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
                                     <FormField control={cardForm.control} name="available" render={({ field }) => (<FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm bg-background"><div className="space-y-0.5"><FormLabel>Disponível na Loja Geral?</FormLabel><FormDescription className="text-xs">Se esta carta pode ser comprada na loja (mesmo fora de evento, se não houver evento vinculado).</FormDescription></div><FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl></FormItem>)} />
                                     <div className="flex gap-2">
-                                        <Button type="submit" disabled={isFormProcessing} className="bg-accent hover:bg-accent/90 text-accent-foreground"> <CreditCard className="mr-2 h-4 w-4" /> {editingCard ? "Salvar Alterações" : "Adicionar Carta"}</Button>
+                                        <Button type="submit" disabled={isFormProcessing} className="bg-accent hover:bg-accent/90 text-accent-foreground"> {isFormProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <CreditCard className="mr-2 h-4 w-4" />} {editingCard ? "Salvar Alterações" : "Adicionar Carta"}</Button>
                                         {editingCard && <Button variant="outline" onClick={() => { setEditingCard(null); cardForm.reset({ name: "", rarity: "Comum", price: 0, imageUrl: "https://placehold.co/200x280.png", available: true, copiesAvailable: null, eventId: null }); }} disabled={isFormProcessing}>Cancelar Edição</Button>}
                                     </div>
                                 </form>
@@ -481,7 +523,7 @@ export function AdminDashboard() {
                                                         </AlertDialogTrigger>
                                                         <AlertDialogContent>
                                                             <AlertDialogHeader><AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle><AlertDialogDescription>Tem certeza que deseja excluir a carta "{card.name}"? Esta ação não pode ser desfeita.</AlertDialogDescription></AlertDialogHeader>
-                                                            <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => deleteCard(card.id)} className="bg-destructive hover:bg-destructive/90">Excluir</AlertDialogAction></AlertDialogFooter>
+                                                            <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => deleteCard(card.id)} className="bg-destructive hover:bg-destructive/90" disabled={isFormProcessing}>Excluir</AlertDialogAction></AlertDialogFooter>
                                                         </AlertDialogContent>
                                                     </AlertDialog>
                                                 </TableCell>
@@ -517,7 +559,7 @@ export function AdminDashboard() {
                                      <FormField control={eventForm.control} name="bonusMultiplier" render={({ field }) => (<FormItem><FormLabel>Multiplicador de Bônus de IFCoins</FormLabel><FormControl><Input type="number" min="1" step="0.1" placeholder="Ex: 1.5 (para 50% a mais)" {...field} /></FormControl><FormDescription className="text-xs">Quantas vezes mais moedas serão ganhas durante o evento (ex: 2 para o dobro).</FormDescription><FormMessage /></FormItem>)} />
                                     {/* TODO: Add multi-select for linked cards if needed later. For now, it's just in schema. */}
                                     <div className="flex gap-2">
-                                        <Button type="submit" disabled={isFormProcessing} className="bg-accent hover:bg-accent/90 text-accent-foreground"><CalendarPlus className="mr-2 h-4 w-4" /> {editingEvent ? "Salvar Alterações" : "Salvar Evento"}</Button>
+                                        <Button type="submit" disabled={isFormProcessing} className="bg-accent hover:bg-accent/90 text-accent-foreground">{isFormProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <CalendarPlus className="mr-2 h-4 w-4" />} {editingEvent ? "Salvar Alterações" : "Salvar Evento"}</Button>
                                         {editingEvent && <Button variant="outline" onClick={() => { setEditingEvent(null); eventForm.reset({ name: "", description: "", imageUrl: "https://placehold.co/400x200.png", startDate: undefined, endDate: undefined, bonusMultiplier: 1, linkedCards: []}); }} disabled={isFormProcessing}>Cancelar Edição</Button>}
                                     </div>
                                 </form>
@@ -536,7 +578,7 @@ export function AdminDashboard() {
                                                     <Image src={event.imageUrl} alt={event.name} width={80} height={45} className="rounded-sm border object-cover" data-ai-hint="event banner" />
                                                 </TableCell>
                                                 <TableCell className="font-medium">{event.name}</TableCell>
-                                                <TableCell className="text-xs">{(event.startDate as Date).toLocaleDateString('pt-BR')} - {(event.endDate as Date).toLocaleDateString('pt-BR')}</TableCell>
+                                                <TableCell className="text-xs">{(event.startDate).toLocaleDateString('pt-BR')} - {(event.endDate).toLocaleDateString('pt-BR')}</TableCell>
                                                 <TableCell className="text-center font-semibold">{event.bonusMultiplier}x</TableCell>
                                                 <TableCell><Badge variant={status === 'Ativo' ? 'default' : status === 'Agendado' ? 'secondary' : 'outline'} className={status === 'Ativo' ? "bg-green-500 text-white" : ""}>{status}</Badge></TableCell>
                                                 <TableCell className="text-right">
@@ -547,7 +589,7 @@ export function AdminDashboard() {
                                                         </AlertDialogTrigger>
                                                         <AlertDialogContent>
                                                             <AlertDialogHeader><AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle><AlertDialogDescription>Tem certeza que deseja excluir o evento "{event.name}"? Esta ação não pode ser desfeita.</AlertDialogDescription></AlertDialogHeader>
-                                                            <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => deleteEvent(event.id)} className="bg-destructive hover:bg-destructive/90">Excluir</AlertDialogAction></AlertDialogFooter>
+                                                            <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => deleteEvent(event.id)} className="bg-destructive hover:bg-destructive/90" disabled={isFormProcessing}>Excluir</AlertDialogAction></AlertDialogFooter>
                                                         </AlertDialogContent>
                                                     </AlertDialog>
                                                 </TableCell>
@@ -575,14 +617,14 @@ export function AdminDashboard() {
                                     <Label htmlFor="enable-trades">Habilitar Trocas entre Alunos</Label>
                                     <p className="text-xs text-muted-foreground">Permitir que alunos proponham e aceitem trocas de cartas e moedas.</p>
                                 </div>
-                                <Switch id="enable-trades" defaultChecked={true} /> {/* Add state management from Firestore config */}
+                                <Switch id="enable-trades" defaultChecked={true} disabled={isFormProcessing} /> {/* Add state management from Firestore config */}
                             </div>
                              <div className="flex items-center justify-between rounded-lg border p-3 shadow-sm">
                                 <div className="space-y-0.5">
                                     <Label htmlFor="pack-limit">Limite Mensal de Pacotes Surpresa</Label>
                                      <p className="text-xs text-muted-foreground">Quantos pacotes "Surpresa Mensal" cada aluno pode comprar por mês.</p>
                                 </div>
-                                <Input id="pack-limit" type="number" className="w-20" defaultValue={1} /> {/* Add state management */}
+                                <Input id="pack-limit" type="number" className="w-20" defaultValue={1} disabled={isFormProcessing} /> {/* Add state management */}
                             </div>
                              <div className="p-4 border border-destructive/50 rounded-lg bg-destructive/10">
                                  <h4 className="font-semibold text-destructive flex items-center gap-2"><AlertTriangle className="h-4 w-4"/> Zona de Perigo</h4>
@@ -590,6 +632,7 @@ export function AdminDashboard() {
                                  <Button variant="destructive" size="sm" disabled>Resetar Temporada (Em Breve)</Button>
                                  <p className="text-xs text-muted-foreground mt-1">Esta ação limpará moedas e cartas de todos os alunos.</p>
                              </div>
+                             <Button disabled={isFormProcessing}> {isFormProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null} Salvar Configurações (Em Breve)</Button>
                         </CardContent>
                     </Card>
                 );
@@ -611,19 +654,19 @@ export function AdminDashboard() {
              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                 <Card className="shadow-sm">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Estudantes Ativos</CardTitle><Users className="h-4 w-4 text-muted-foreground" /></CardHeader>
-                    <CardContent><div className="text-2xl font-bold">{totalStudents}</div><p className="text-xs text-muted-foreground">{users.length} usuários totais</p></CardContent>
+                    <CardContent><div className="text-2xl font-bold">{isInitialLoading ? <Loader2 className="h-5 w-5 animate-spin"/> : totalStudents}</div><p className="text-xs text-muted-foreground">{users.length} usuários totais</p></CardContent>
                 </Card>
                  <Card className="shadow-sm">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Cartas no Sistema</CardTitle><CreditCard className="h-4 w-4 text-muted-foreground" /></CardHeader>
-                    <CardContent><div className="text-2xl font-bold">{cards.length}</div><p className="text-xs text-muted-foreground">Tipos de cartas únicas</p></CardContent>
+                    <CardContent><div className="text-2xl font-bold">{isInitialLoading ? <Loader2 className="h-5 w-5 animate-spin"/> : cards.length}</div><p className="text-xs text-muted-foreground">Tipos de cartas únicas</p></CardContent>
                  </Card>
                  <Card className="shadow-sm">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Eventos Ativos</CardTitle><Star className="h-4 w-4 text-muted-foreground" /></CardHeader>
-                    <CardContent><div className="text-2xl font-bold">{activeEventsCount}</div><p className="text-xs text-muted-foreground">{events.length} eventos totais</p></CardContent>
+                    <CardContent><div className="text-2xl font-bold">{isInitialLoading ? <Loader2 className="h-5 w-5 animate-spin"/> : activeEventsCount}</div><p className="text-xs text-muted-foreground">{events.length} eventos totais</p></CardContent>
                  </Card>
                 <Card className="shadow-sm">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Moedas Circulando</CardTitle><Coins className="h-4 w-4 text-muted-foreground" /></CardHeader>
-                    <CardContent><div className="text-2xl font-bold">{totalCoinsInSystem.toLocaleString('pt-BR')}</div><p className="text-xs text-muted-foreground">Total de IFCoins no sistema</p></CardContent>
+                    <CardContent><div className="text-2xl font-bold">{isInitialLoading ? <Loader2 className="h-5 w-5 animate-spin"/> : totalCoinsInSystem.toLocaleString('pt-BR')}</div><p className="text-xs text-muted-foreground">Total de IFCoins no sistema</p></CardContent>
                 </Card>
             </div>
 
@@ -653,5 +696,3 @@ export function AdminDashboard() {
         </div>
     );
 }
-
-    
