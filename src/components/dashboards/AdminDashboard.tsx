@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { UserPlus, CreditCard, CalendarPlus, Settings, BarChart3, Upload, Star, Users, AlertTriangle, Coins, Loader2, Edit3, Trash2, Image as ImageIcon } from "lucide-react";
+import { UserPlus, CreditCard, CalendarPlus, Settings, BarChart3, Upload, Star, Users, AlertTriangle, Coins, Loader2, Edit3, Trash2, Image as ImageIcon, MinusSquare, Minus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, Controller } from "react-hook-form";
@@ -70,7 +70,7 @@ interface EventData {
     linkedCards?: string[];
 }
 
-const NO_EVENT_SELECTED_VALUE = "_NO_EVENT_";
+const NO_EVENT_SELECTED_VALUE = "_NONE_";
 
 const studentSchema = z.object({
     name: z.string().min(3, { message: "Nome deve ter pelo menos 3 caracteres." }),
@@ -80,13 +80,13 @@ const studentSchema = z.object({
 });
 
 const cardSchema = z.object({
-    name: z.string().min(3, "Nome da carta é muito curto."),
+    name: z.string().min(3, "Nome da carta deve ter pelo menos 3 caracteres."),
     rarity: z.enum(["Comum", "Raro", "Lendário", "Mítico"]),
     price: z.coerce.number().min(0, "Preço deve ser positivo ou zero.").default(0),
     imageUrl: z.string().url("URL da imagem inválida.").default("https://placehold.co/200x280.png"),
     available: z.boolean().default(true),
     copiesAvailable: z.coerce.number().int("Deve ser um número inteiro.").positive("Deve ser positivo.").optional().nullable().transform(val => val === undefined || val === null || isNaN(val) ? null : Number(val)),
-    eventId: z.string().optional().nullable().transform(val => (val === "" || val === undefined) ? null : val),
+    eventId: z.string().optional().nullable().transform(val => (val === "" || val === undefined || val === NO_EVENT_SELECTED_VALUE) ? null : val),
 });
 
 const eventSchema = z.object({
@@ -131,7 +131,7 @@ export function AdminDashboard() {
         }, (error) => {
             console.error("Error fetching users: ", error);
             toast({ title: "Erro ao buscar usuários", description: error.message, variant: "destructive" });
-            setUsersLoaded(true); // Still set to true to allow page to render content
+            setUsersLoaded(true);
         });
         return () => unsubscribe();
     }, [toast]);
@@ -149,7 +149,7 @@ export function AdminDashboard() {
         });
         return () => unsubscribe();
     }, [toast]);
-    
+
     // Fetch Events
     useEffect(() => {
         const unsubscribe = onSnapshot(collection(db, "events"), (snapshot) => {
@@ -204,7 +204,7 @@ export function AdminDashboard() {
             linkedCards: [],
         },
     });
-    
+
     const userForm = useForm<z.infer<typeof studentSchema>>({
         resolver: zodResolver(studentSchema),
         defaultValues: { name: "", ra: "", email: "", role: "student" },
@@ -245,7 +245,7 @@ export function AdminDashboard() {
             const dataToSave = {
                 ...values,
                 copiesAvailable: values.copiesAvailable === undefined ? null : values.copiesAvailable,
-                eventId: values.eventId === undefined ? null : values.eventId,
+                eventId: values.eventId === undefined || values.eventId === NO_EVENT_SELECTED_VALUE ? null : values.eventId,
             };
 
             if (editingCard) {
@@ -264,7 +264,7 @@ export function AdminDashboard() {
             setIsFormProcessing(false);
         }
     }
-    
+
     async function deleteCard(cardId: string) {
         setIsFormProcessing(true);
         try {
@@ -313,7 +313,7 @@ export function AdminDashboard() {
             setIsFormProcessing(false);
         }
     }
-    
+
     async function onUserSubmit(values: z.infer<typeof studentSchema>) {
         setIsFormProcessing(true);
         try {
@@ -321,13 +321,11 @@ export function AdminDashboard() {
                 await updateDoc(doc(db, "users", editingUser.id), {
                     name: values.name,
                     ra: values.ra,
-                    email: values.email, 
+                    email: values.email,
                     role: values.role,
                 });
                 toast({ title: "Usuário Atualizado!", description: `Os dados de "${values.name}" foram atualizados.` });
             } else {
-                // User creation via admin panel is usually more complex (e.g. needs password setting flow)
-                // For now, rely on standard registration or direct Firestore manipulation for new user roles.
                 toast({ title: "Ação não suportada", description: "Criação de novos usuários aqui não é recomendada. Use a tela de registro ou modifique o usuário no Firestore.", variant: "destructive" });
             }
             userForm.reset({ name: "", ra: "", email: "", role: "student" });
@@ -341,18 +339,15 @@ export function AdminDashboard() {
     }
 
      async function handleStudentRegistration(data: any) {
-        // This is a placeholder for bulk registration.
-        // Actual implementation would involve parsing CSV, validating, and creating users/sending invites.
         console.log("Registering students from CSV (placeholder):", data);
         setIsFormProcessing(true);
         await new Promise(resolve => setTimeout(resolve, 1500));
         setIsFormProcessing(false);
         toast({ title: "Funcionalidade em Desenvolvimento", description: "Upload de CSV para pré-registro será implementado." });
      }
-     
+
      const getEventStatus = (event: EventData): 'Ativo' | 'Agendado' | 'Concluído' => {
         const now = new Date();
-        // Ensure startDate and endDate are Date objects
         const startDate = event.startDate instanceof Date ? event.startDate : new Date(event.startDate);
         const endDate = event.endDate instanceof Date ? event.endDate : new Date(event.endDate);
 
@@ -425,7 +420,6 @@ export function AdminDashboard() {
                                                     <Button variant="ghost" size="icon" onClick={() => setEditingUser(user)} className="hover:text-primary" disabled={isFormProcessing}>
                                                         <Edit3 className="h-4 w-4"/>
                                                     </Button>
-                                                    {/* Delete user might be too destructive, usually disable/archive is better. For now, no delete. */}
                                                 </TableCell>
                                             </TableRow>
                                         ))}
@@ -451,9 +445,9 @@ export function AdminDashboard() {
                                      <h3 className="text-lg font-semibold mb-2">{editingCard ? "Editar Carta" : "Adicionar Nova Carta"}</h3>
                                     <FormField control={cardForm.control} name="name" render={({ field }) => (<FormItem><FormLabel>Nome da Carta</FormLabel><FormControl><Input placeholder="Ex: Mascote IFPR Raro" {...field} /></FormControl><FormMessage /></FormItem>)} />
                                      <FormField control={cardForm.control} name="rarity" render={({ field }) => (<FormItem><FormLabel>Raridade</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Selecione a raridade" /></SelectTrigger></FormControl><SelectContent><SelectItem value="Comum">Comum</SelectItem><SelectItem value="Raro">Raro</SelectItem><SelectItem value="Lendário">Lendário</SelectItem><SelectItem value="Mítico">Mítico</SelectItem></SelectContent></Select><FormMessage /></FormItem>)} />
-                                     <FormField control={cardForm.control} name="price" render={({ field }) => (<FormItem><FormLabel>Preço na Loja (IFCoins)</FormLabel><FormControl><Input type="number" placeholder="Ex: 10" {...field} /></FormControl><FormMessage /></FormItem>)} />
+                                     <FormField control={cardForm.control} name="price" render={({ field }) => (<FormItem><FormLabel>Preço na Loja (IFCoins)</FormLabel><FormControl><Input type="number" placeholder="Ex: 10" {...field} value={(field.value !== undefined && field.value !== null && !isNaN(field.value as number)) ? field.value : ''} onChange={e => field.onChange(e.target.value === '' ? undefined : parseFloat(e.target.value))} /></FormControl><FormMessage /></FormItem>)} />
                                     <FormField control={cardForm.control} name="imageUrl" render={({ field }) => (<FormItem><FormLabel>URL da Imagem</FormLabel><FormControl><Input type="url" placeholder="https://placehold.co/200x280.png" {...field} /></FormControl><FormDescription className="text-xs">Use https://placehold.co/larguraxaltura.png para placeholders.</FormDescription><FormMessage /></FormItem>)} />
-                                    <FormField control={cardForm.control} name="copiesAvailable" render={({ field }) => (<FormItem><FormLabel>Cópias Disponíveis (Opcional)</FormLabel><FormControl><Input type="number" placeholder="Deixe em branco para ilimitado" {...field} value={field.value ?? ''} onChange={e => field.onChange(e.target.value === '' ? null : Number(e.target.value))} /></FormControl><FormDescription className="text-xs">Para cartas com estoque limitado na loja. Deixe vazio para ilimitado.</FormDescription><FormMessage /></FormItem>)} />
+                                    <FormField control={cardForm.control} name="copiesAvailable" render={({ field }) => (<FormItem><FormLabel>Cópias Disponíveis (Opcional)</FormLabel><FormControl><Input type="number" placeholder="Deixe em branco para ilimitado" {...field} value={(field.value !== undefined && field.value !== null && !isNaN(field.value as number)) ? field.value : ''} onChange={e => field.onChange(e.target.value === '' ? null : parseInt(e.target.value, 10))} /></FormControl><FormDescription className="text-xs">Para cartas com estoque limitado na loja. Deixe vazio para ilimitado.</FormDescription><FormMessage /></FormItem>)} />
                                      <FormField
                                         control={cardForm.control}
                                         name="eventId"
@@ -462,13 +456,9 @@ export function AdminDashboard() {
                                                 <FormLabel>Vincular a Evento (Opcional)</FormLabel>
                                                 <Select
                                                     onValueChange={(selectedValue) => {
-                                                        if (selectedValue === NO_EVENT_SELECTED_VALUE) {
-                                                            field.onChange(undefined); 
-                                                        } else {
-                                                            field.onChange(selectedValue);
-                                                        }
+                                                        field.onChange(selectedValue === NO_EVENT_SELECTED_VALUE ? null : selectedValue);
                                                     }}
-                                                    value={field.value || undefined} // Ensures placeholder shows if field.value is null/undefined
+                                                    value={field.value || NO_EVENT_SELECTED_VALUE}
                                                 >
                                                     <FormControl>
                                                         <SelectTrigger>
@@ -556,8 +546,7 @@ export function AdminDashboard() {
                                          <FormField control={eventForm.control} name="startDate" render={({ field }) => (<FormItem className="flex flex-col"><FormLabel>Data de Início</FormLabel><DatePicker date={field.value} setDate={field.onChange} /><FormMessage /></FormItem>)} />
                                          <FormField control={eventForm.control} name="endDate" render={({ field }) => (<FormItem className="flex flex-col"><FormLabel>Data de Término</FormLabel><DatePicker date={field.value} setDate={field.onChange} /><FormMessage /></FormItem>)} />
                                     </div>
-                                     <FormField control={eventForm.control} name="bonusMultiplier" render={({ field }) => (<FormItem><FormLabel>Multiplicador de Bônus de IFCoins</FormLabel><FormControl><Input type="number" min="1" step="0.1" placeholder="Ex: 1.5 (para 50% a mais)" {...field} /></FormControl><FormDescription className="text-xs">Quantas vezes mais moedas serão ganhas durante o evento (ex: 2 para o dobro).</FormDescription><FormMessage /></FormItem>)} />
-                                    {/* TODO: Add multi-select for linked cards if needed later. For now, it's just in schema. */}
+                                     <FormField control={eventForm.control} name="bonusMultiplier" render={({ field }) => (<FormItem><FormLabel>Multiplicador de Bônus de IFCoins</FormLabel><FormControl><Input type="number" min="1" step="0.1" placeholder="Ex: 1.5 (para 50% a mais)" {...field} value={(field.value !== undefined && field.value !== null && !isNaN(field.value as number)) ? field.value : ''} onChange={e => field.onChange(e.target.value === '' ? undefined : parseFloat(e.target.value))} /></FormControl><FormDescription className="text-xs">Quantas vezes mais moedas serão ganhas durante o evento (ex: 2 para o dobro).</FormDescription><FormMessage /></FormItem>)} />
                                     <div className="flex gap-2">
                                         <Button type="submit" disabled={isFormProcessing} className="bg-accent hover:bg-accent/90 text-accent-foreground">{isFormProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <CalendarPlus className="mr-2 h-4 w-4" />} {editingEvent ? "Salvar Alterações" : "Salvar Evento"}</Button>
                                         {editingEvent && <Button variant="outline" onClick={() => { setEditingEvent(null); eventForm.reset({ name: "", description: "", imageUrl: "https://placehold.co/400x200.png", startDate: undefined, endDate: undefined, bonusMultiplier: 1, linkedCards: []}); }} disabled={isFormProcessing}>Cancelar Edição</Button>}
@@ -617,14 +606,14 @@ export function AdminDashboard() {
                                     <Label htmlFor="enable-trades">Habilitar Trocas entre Alunos</Label>
                                     <p className="text-xs text-muted-foreground">Permitir que alunos proponham e aceitem trocas de cartas e moedas.</p>
                                 </div>
-                                <Switch id="enable-trades" defaultChecked={true} disabled={isFormProcessing} /> {/* Add state management from Firestore config */}
+                                <Switch id="enable-trades" defaultChecked={true} disabled={isFormProcessing} />
                             </div>
                              <div className="flex items-center justify-between rounded-lg border p-3 shadow-sm">
                                 <div className="space-y-0.5">
                                     <Label htmlFor="pack-limit">Limite Mensal de Pacotes Surpresa</Label>
                                      <p className="text-xs text-muted-foreground">Quantos pacotes "Surpresa Mensal" cada aluno pode comprar por mês.</p>
                                 </div>
-                                <Input id="pack-limit" type="number" className="w-20" defaultValue={1} disabled={isFormProcessing} /> {/* Add state management */}
+                                <Input id="pack-limit" type="number" className="w-20" defaultValue={1} disabled={isFormProcessing} />
                             </div>
                              <div className="p-4 border border-destructive/50 rounded-lg bg-destructive/10">
                                  <h4 className="font-semibold text-destructive flex items-center gap-2"><AlertTriangle className="h-4 w-4"/> Zona de Perigo</h4>
