@@ -1,3 +1,4 @@
+
 "use client";
 
 import * as React from "react";
@@ -56,18 +57,14 @@ export function LoginForm() {
       if (userDocSnap.exists()) {
         userRole = userDocSnap.data()?.role || 'student';
       } else {
-        // Fallback for users created before Firestore profile, or edge cases
-        // For this app, we can keep the admin@admin.com check as a super-admin fallback
-        // if Firestore profile doesn't exist (though it should for new users)
         if (values.email === 'admin@admin.com') {
             userRole = 'admin';
         }
         console.warn("User document not found in Firestore for UID:", user.uid);
       }
       
-      // Specific hardcoded super-admin check - can be removed if all admins are via Firestore role
       if (values.email === 'admin@admin.com' && values.password === 'admin') {
-        userRole = 'admin'; // Override if it's the hardcoded super admin
+        userRole = 'admin'; 
       }
 
 
@@ -79,15 +76,15 @@ export function LoginForm() {
           description: "Redirecionando para o painel administrativo...",
           variant: "default",
         });
-      } else if (userRole === 'teacher') {
+      } else if (userRole === 'teacher' || userRole === 'staff') { // Added staff role
         redirectPath = '/dashboard/teacher';
          toast({
-          title: "Login de Professor bem-sucedido!",
-          description: "Redirecionando para o painel do professor...",
+          title: `Login de ${userRole === 'teacher' ? 'Professor' : 'Servidor'} bem-sucedido!`,
+          description: `Redirecionando para o painel de ${userRole === 'teacher' ? 'professor' : 'servidor'}...`,
           variant: "default",
         });
       }
-      else {
+      else { // Student
         toast({
           title: "Login bem-sucedido!",
           description: "Redirecionando para o painel do aluno...",
@@ -98,16 +95,21 @@ export function LoginForm() {
       router.push(redirectPath);
 
     } catch (error: any) {
-      console.error("Login failed:", error);
-      let errorMessage = "Email ou senha inválidos. Por favor, tente novamente.";
       if (error.code === "auth/user-not-found" || error.code === "auth/wrong-password" || error.code === "auth/invalid-credential") {
-        errorMessage = "Email ou senha inválidos.";
+        console.warn(`Login attempt failed (${error.code}): ${error.message}`);
+        toast({
+          title: "Erro no Login",
+          description: "Email ou senha inválidos.",
+          variant: "destructive",
+        });
+      } else {
+        console.error("Login failed with unexpected error:", error);
+        toast({
+          title: "Erro no Login",
+          description: "Ocorreu um erro inesperado. Por favor, tente novamente.",
+          variant: "destructive",
+        });
       }
-      toast({
-        title: "Erro no Login",
-        description: errorMessage,
-        variant: "destructive",
-      });
     } finally {
       setIsLoading(false);
     }
