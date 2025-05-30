@@ -2,7 +2,7 @@
 "use client";
 
 import Link from 'next/link';
-import React, { useState, useEffect } from 'react'; // Import React
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -37,8 +37,8 @@ interface EventData {
     startDate: Timestamp;
     endDate: Timestamp;
     bonusMultiplier: number;
-    description?: string; // Optional, based on your events structure
-    imageUrl?: string; // Optional
+    description?: string;
+    imageUrl?: string;
 }
 
 
@@ -48,7 +48,7 @@ export function StudentDashboard() {
     const [featuredCard, setFeaturedCard] = useState<CardData | null>(null);
     const [currentEvent, setCurrentEvent] = useState<EventData | null>(null);
     const [isLoading, setIsLoading] = useState(true);
-    const [isLoadingExtra, setIsLoadingExtra] = useState(true); // For featured card & event
+    const [isLoadingExtra, setIsLoadingExtra] = useState(true);
 
     useEffect(() => {
         const unsubscribeAuth = onAuthStateChanged(auth, (user: User | null) => {
@@ -70,63 +70,100 @@ export function StudentDashboard() {
                     } else {
                         console.warn("User document not found in Firestore for student dashboard.");
                     }
-                    setIsLoading(false); // User profile loading done
+                    setIsLoading(false);
                 }, (error) => {
                     console.error("Error fetching student profile:", error);
                     setIsLoading(false);
                 });
                 return () => unsubscribeSnapshot();
             } else {
-                setIsLoading(false);
+                setIsLoading(false); // No user, stop loading
+                setStudentProfile(null); // Clear profile if user logs out
             }
         });
         return () => unsubscribeAuth();
     }, []);
 
     useEffect(() => {
-        // Fetch total system cards, featured card, and current event
         const fetchExtraData = async () => {
             setIsLoadingExtra(true);
             try {
+                // Fetch total system cards
                 const cardsCollectionRef = collection(db, "cards");
-                
-                // Fetch all cards for random selection and total count
                 const allCardsSnapshot = await getDocs(cardsCollectionRef);
                 setTotalSystemCards(allCardsSnapshot.size);
 
+                // Set a random featured card
                 if (!allCardsSnapshot.empty) {
-                    const randomIndex = Math.floor(Math.random() * allCardsSnapshot.docs.length);
-                    const randomCardDoc = allCardsSnapshot.docs[randomIndex];
-                    setFeaturedCard({ id: randomCardDoc.id, ...randomCardDoc.data() } as CardData);
+                    const allCardsData = allCardsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CardData));
+                    const randomIndex = Math.floor(Math.random() * allCardsData.length);
+                    setFeaturedCard(allCardsData[randomIndex]);
+                } else {
+                    setFeaturedCard(null);
                 }
 
                 // Current Event
-                const now = Timestamp.now();
-                const eventsCollectionRef = collection(db, "events");
-                const activeEventQuery = query(
-                    eventsCollectionRef,
-                    where("startDate", "<=", now),
-                    where("endDate", ">=", now), // Event must also not have ended
-                    orderBy("startDate", "desc"), // If multiple are active, pick the one that started most recently
-                    limit(1)
-                );
-                const activeEventSnapshot = await getDocs(activeEventQuery);
-                
-                if (!activeEventSnapshot.empty) {
-                     setCurrentEvent({ id: activeEventSnapshot.docs[0].id, ...activeEventSnapshot.docs[0].data() } as EventData);
-                } else {
-                    setCurrentEvent(null); // No active event found
+                try {
+                    const now = Timestamp.now();
+                    const eventsCollectionRef = collection(db, "events");
+                    console.log("[StudentDashboard] Fetching active event. Current Timestamp:", now.toDate().toISOString());
+
+                    const activeEventQuery = query(
+                        eventsCollectionRef,
+                        where("startDate", "<=", now),
+                        where("endDate", ">=", now),
+                        orderBy("startDate", "desc"),
+                        limit(1)
+                    );
+
+                    const activeEventSnapshot = await getDocs(activeEventQuery);
+                    console.log("[StudentDashboard] Active event query snapshot size:", activeEventSnapshot.size);
+
+                    if (!activeEventSnapshot.empty) {
+                        const eventDoc = activeEventSnapshot.docs[0];
+                        const eventData = eventDoc.data();
+                        console.log("[StudentDashboard] Found active event document:", eventDoc.id, eventData);
+                        
+                        // Ensure Timestamps are correctly handled (Firestore SDK usually does this)
+                        const startDate = eventData.startDate instanceof Timestamp ? eventData.startDate : Timestamp.fromDate(new Date(eventData.startDate));
+                        const endDate = eventData.endDate instanceof Timestamp ? eventData.endDate : Timestamp.fromDate(new Date(eventData.endDate));
+
+                        console.log(`[StudentDashboard] Event "${eventData.name}" Start: ${startDate.toDate().toISOString()}, End: ${endDate.toDate().toISOString()}`);
+
+                        setCurrentEvent({
+                            id: eventDoc.id,
+                            name: eventData.name,
+                            startDate: startDate,
+                            endDate: endDate,
+                            bonusMultiplier: eventData.bonusMultiplier,
+                            description: eventData.description,
+                            imageUrl: eventData.imageUrl,
+                        } as EventData);
+                    } else {
+                        console.log("[StudentDashboard] No active event found by query.");
+                        setCurrentEvent(null);
+                    }
+                } catch (eventError) {
+                    console.error("[StudentDashboard] Error fetching current event:", eventError);
+                    setCurrentEvent(null);
                 }
 
             } catch (error) {
-                console.error("Error fetching extra dashboard data:", error);
+                console.error("[StudentDashboard] Error fetching extra dashboard data (cards/total):", error);
             } finally {
                 setIsLoadingExtra(false);
             }
         };
 
-        fetchExtraData();
-    }, []);
+        if (studentProfile) { // Only fetch extra data if a student is logged in
+             fetchExtraData();
+        } else {
+            setIsLoadingExtra(false); // No student, no extra data to load
+            setTotalSystemCards(0);
+            setFeaturedCard(null);
+            setCurrentEvent(null);
+        }
+    }, [studentProfile]);
 
 
     if (isLoading || !studentProfile) {
