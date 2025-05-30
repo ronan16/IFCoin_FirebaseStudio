@@ -23,7 +23,7 @@ import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import { auth, db } from '@/lib/firebase/firebase'; // Import auth and db
 import { onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
-import { doc, getDoc, onSnapshot, runTransaction, Timestamp, collection, query, where } from "firebase/firestore";
+import { doc, getDoc, onSnapshot, runTransaction, Timestamp, collection, query, where, setDoc, updateDoc } from "firebase/firestore";
 
 // Interfaces matching AdminDashboard definitions
 interface CardData {
@@ -99,14 +99,13 @@ export default function ShopPage() {
             } else {
                 setCurrentUser(null);
                 setUserCoins(0);
-                // Potentially redirect if no user, though layout should handle this
             }
         });
 
         const unsubscribeCards = onSnapshot(collection(db, "cards"), (snapshot) => {
             const cardsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CardData));
             setAllCards(cardsData);
-            if (isLoading) setIsLoading(false); // Initial load done
+            if (isLoading) setIsLoading(false); 
         }, (error) => {
             console.error("Error fetching cards:", error);
             toast({ title: "Erro ao buscar cartas", description: error.message, variant: "destructive" });
@@ -119,7 +118,7 @@ export default function ShopPage() {
                 return {
                     id: doc.id,
                     ...data,
-                    startDate: data.startDate, // Keep as Timestamp or Date
+                    startDate: data.startDate, 
                     endDate: data.endDate,
                 } as EventData;
             });
@@ -143,11 +142,11 @@ export default function ShopPage() {
         if (card.eventId) {
             const linkedEvent = allEvents.find(e => e.id === card.eventId);
             if (linkedEvent && getEventStatus(linkedEvent) === 'Ativo') {
-                return card.available; // Card is available if linked event is active and card itself is marked available
+                return card.available; 
             }
-            return false; // Not available if event not active or not found
+            return false; 
         }
-        return card.available; // General availability if no event linked
+        return card.available; 
     });
 
     const handleBuyClick = (item: CardData) => {
@@ -166,15 +165,17 @@ export default function ShopPage() {
         if (!itemToBuy || !currentUser || isPurchasing) return;
         setIsPurchasing(true);
 
-        const cardToBuy = itemToBuy; // itemToBuy is a CardData
+        const cardToBuy = itemToBuy;
 
         try {
             await runTransaction(db, async (transaction) => {
                 const userDocRef = doc(db, "users", currentUser.uid);
                 const cardDocRef = doc(db, "cards", cardToBuy.id);
+                const userOwnedCardDocRef = doc(db, "users", currentUser.uid, "ownedCards", cardToBuy.id);
 
                 const userDoc = await transaction.get(userDocRef);
                 const cardDoc = await transaction.get(cardDocRef);
+                const userOwnedCardDoc = await transaction.get(userOwnedCardDocRef);
 
                 if (!userDoc.exists()) {
                     throw new Error("Usuário não encontrado.");
@@ -197,14 +198,30 @@ export default function ShopPage() {
                     }
                     transaction.update(cardDocRef, { copiesAvailable: currentCopies - 1 });
                 }
-
+                
+                // Update user's coins
                 transaction.update(userDocRef, {
                     coins: currentCoins - cardPrice,
-                    cardsCollected: (userDoc.data().cardsCollected || 0) + 1 // Simplified: increment unique card count
                 });
 
-                // TODO: Implement actual addition of card to user's inventory in Firestore for CollectionPage
-                // For example, add to a subcollection `users/{userId}/owned_cards/{cardId}` with quantity.
+                // Add/Update card in user's ownedCards subcollection
+                if (userOwnedCardDoc.exists()) {
+                    transaction.update(userOwnedCardDocRef, {
+                        quantity: (userOwnedCardDoc.data().quantity || 0) + 1
+                    });
+                } else {
+                    transaction.set(userOwnedCardDocRef, {
+                        cardId: cardToBuy.id,
+                        quantity: 1,
+                        // You might want to store a reference to the card document or some denormalized data here too
+                        // e.g., name: cardToBuy.name, imageUrl: cardToBuy.imageUrl, rarity: cardToBuy.rarity
+                        // For simplicity, we'll just store cardId and quantity now.
+                    });
+                    // Increment unique cards collected count if it's a new card type for the user
+                    transaction.update(userDocRef, {
+                        cardsCollected: (userDoc.data().cardsCollected || 0) + 1
+                    });
+                }
             });
 
             toast({
@@ -359,5 +376,4 @@ export default function ShopPage() {
         </div>
     );
 }
-
     
