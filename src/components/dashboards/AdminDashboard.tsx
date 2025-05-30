@@ -445,9 +445,52 @@ export function AdminDashboard() {
                                      <h3 className="text-lg font-semibold mb-2">{editingCard ? "Editar Carta" : "Adicionar Nova Carta"}</h3>
                                     <FormField control={cardForm.control} name="name" render={({ field }) => (<FormItem><FormLabel>Nome da Carta</FormLabel><FormControl><Input placeholder="Ex: Mascote IFPR Raro" {...field} /></FormControl><FormMessage /></FormItem>)} />
                                      <FormField control={cardForm.control} name="rarity" render={({ field }) => (<FormItem><FormLabel>Raridade</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Selecione a raridade" /></SelectTrigger></FormControl><SelectContent><SelectItem value="Comum">Comum</SelectItem><SelectItem value="Raro">Raro</SelectItem><SelectItem value="Lendário">Lendário</SelectItem><SelectItem value="Mítico">Mítico</SelectItem></SelectContent></Select><FormMessage /></FormItem>)} />
-                                     <FormField control={cardForm.control} name="price" render={({ field }) => (<FormItem><FormLabel>Preço na Loja (IFCoins)</FormLabel><FormControl><Input type="number" placeholder="Ex: 10" {...field} value={(field.value !== undefined && field.value !== null && !isNaN(field.value as number)) ? field.value : ''} onChange={e => field.onChange(e.target.value === '' ? undefined : parseFloat(e.target.value))} /></FormControl><FormMessage /></FormItem>)} />
+                                     <FormField
+                                        control={cardForm.control}
+                                        name="price"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Preço na Loja (IFCoins)</FormLabel>
+                                                <FormControl>
+                                                    <Input
+                                                        type="number"
+                                                        placeholder="Ex: 10"
+                                                        {...field}
+                                                        value={(field.value !== undefined && field.value !== null && !isNaN(field.value as number)) ? String(field.value) : ''}
+                                                        onChange={e => {
+                                                            const stringValue = e.target.value;
+                                                            field.onChange(stringValue === '' ? undefined : stringValue);
+                                                        }}
+                                                    />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
                                     <FormField control={cardForm.control} name="imageUrl" render={({ field }) => (<FormItem><FormLabel>URL da Imagem</FormLabel><FormControl><Input type="url" placeholder="https://placehold.co/200x280.png" {...field} /></FormControl><FormDescription className="text-xs">Use https://placehold.co/larguraxaltura.png para placeholders.</FormDescription><FormMessage /></FormItem>)} />
-                                    <FormField control={cardForm.control} name="copiesAvailable" render={({ field }) => (<FormItem><FormLabel>Cópias Disponíveis (Opcional)</FormLabel><FormControl><Input type="number" placeholder="Deixe em branco para ilimitado" {...field} value={(field.value !== undefined && field.value !== null && !isNaN(field.value as number)) ? field.value : ''} onChange={e => field.onChange(e.target.value === '' ? null : parseInt(e.target.value, 10))} /></FormControl><FormDescription className="text-xs">Para cartas com estoque limitado na loja. Deixe vazio para ilimitado.</FormDescription><FormMessage /></FormItem>)} />
+                                    <FormField 
+                                        control={cardForm.control} 
+                                        name="copiesAvailable" 
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Cópias Disponíveis (Opcional)</FormLabel>
+                                                <FormControl>
+                                                    <Input 
+                                                        type="number" 
+                                                        placeholder="Deixe em branco para ilimitado" 
+                                                        {...field} 
+                                                        value={(field.value !== undefined && field.value !== null && !isNaN(field.value as number)) ? String(field.value) : ''} 
+                                                        onChange={e => {
+                                                            const val = e.target.value;
+                                                            field.onChange(val === '' ? null : parseInt(val, 10)); // Pass null if empty
+                                                        }}
+                                                    />
+                                                </FormControl>
+                                                <FormDescription className="text-xs">Para cartas com estoque limitado na loja. Deixe vazio para ilimitado.</FormDescription>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )} 
+                                    />
                                      <FormField
                                         control={cardForm.control}
                                         name="eventId"
@@ -546,7 +589,31 @@ export function AdminDashboard() {
                                          <FormField control={eventForm.control} name="startDate" render={({ field }) => (<FormItem className="flex flex-col"><FormLabel>Data de Início</FormLabel><DatePicker date={field.value} setDate={field.onChange} /><FormMessage /></FormItem>)} />
                                          <FormField control={eventForm.control} name="endDate" render={({ field }) => (<FormItem className="flex flex-col"><FormLabel>Data de Término</FormLabel><DatePicker date={field.value} setDate={field.onChange} /><FormMessage /></FormItem>)} />
                                     </div>
-                                     <FormField control={eventForm.control} name="bonusMultiplier" render={({ field }) => (<FormItem><FormLabel>Multiplicador de Bônus de IFCoins</FormLabel><FormControl><Input type="number" min="1" step="0.1" placeholder="Ex: 1.5 (para 50% a mais)" {...field} value={(field.value !== undefined && field.value !== null && !isNaN(field.value as number)) ? field.value : ''} onChange={e => field.onChange(e.target.value === '' ? undefined : parseFloat(e.target.value))} /></FormControl><FormDescription className="text-xs">Quantas vezes mais moedas serão ganhas durante o evento (ex: 2 para o dobro).</FormDescription><FormMessage /></FormItem>)} />
+                                     <FormField 
+                                        control={eventForm.control} 
+                                        name="bonusMultiplier" 
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Multiplicador de Bônus de IFCoins</FormLabel>
+                                                <FormControl>
+                                                    <Input 
+                                                        type="number" 
+                                                        min="1" 
+                                                        step="0.1" 
+                                                        placeholder="Ex: 1.5 (para 50% a mais)" 
+                                                        {...field} 
+                                                        value={(field.value !== undefined && field.value !== null && !isNaN(field.value as number)) ? String(field.value) : ''} 
+                                                        onChange={e => {
+                                                            const val = e.target.value;
+                                                            field.onChange(val === '' ? undefined : parseFloat(val));
+                                                        }}
+                                                    />
+                                                </FormControl>
+                                                <FormDescription className="text-xs">Quantas vezes mais moedas serão ganhas durante o evento (ex: 2 para o dobro).</FormDescription>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )} 
+                                    />
                                     <div className="flex gap-2">
                                         <Button type="submit" disabled={isFormProcessing} className="bg-accent hover:bg-accent/90 text-accent-foreground">{isFormProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <CalendarPlus className="mr-2 h-4 w-4" />} {editingEvent ? "Salvar Alterações" : "Salvar Evento"}</Button>
                                         {editingEvent && <Button variant="outline" onClick={() => { setEditingEvent(null); eventForm.reset({ name: "", description: "", imageUrl: "https://placehold.co/400x200.png", startDate: undefined, endDate: undefined, bonusMultiplier: 1, linkedCards: []}); }} disabled={isFormProcessing}>Cancelar Edição</Button>}
@@ -685,3 +752,5 @@ export function AdminDashboard() {
         </div>
     );
 }
+
+    
