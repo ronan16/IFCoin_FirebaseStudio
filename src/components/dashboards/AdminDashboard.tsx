@@ -55,7 +55,7 @@ interface CardData {
     available: boolean;
     copiesAvailable?: number | null;
     eventId?: string | null;
-    price: number; // Price is not optional
+    price?: number; // Price made optional to align with reset values if needed
 }
 
 interface EventData {
@@ -82,7 +82,7 @@ const studentSchema = z.object({
 const cardSchema = z.object({
     name: z.string().min(3, "Nome da carta deve ter pelo menos 3 caracteres."),
     rarity: z.enum(["Comum", "Raro", "Lendário", "Mítico"]),
-    price: z.coerce.number().min(0, "Preço deve ser positivo ou zero.").default(0),
+    price: z.coerce.number().min(0, "Preço deve ser positivo ou zero.").optional().default(0),
     imageUrl: z.string().url("URL da imagem inválida.").default("https://placehold.co/200x280.png"),
     available: z.boolean().default(true),
     copiesAvailable: z.coerce.number().int("Deve ser um número inteiro.").positive("Deve ser positivo.").optional().nullable().transform(val => val === undefined || val === null || isNaN(val) ? null : Number(val)),
@@ -131,7 +131,7 @@ export function AdminDashboard() {
         }, (error) => {
             console.error("Error fetching users: ", error);
             toast({ title: "Erro ao buscar usuários", description: error.message, variant: "destructive" });
-            setUsersLoaded(true);
+            setUsersLoaded(true); // Mark as loaded even on error to stop global spinner
         });
         return () => unsubscribe();
     }, [toast]);
@@ -172,7 +172,7 @@ export function AdminDashboard() {
         return () => unsubscribe();
     }, [toast]);
 
-    useEffect(() => {
+     useEffect(() => {
         if (usersLoaded && cardsLoaded && eventsLoaded) {
             setIsInitialLoading(false);
         }
@@ -184,7 +184,7 @@ export function AdminDashboard() {
         defaultValues: {
             name: "",
             rarity: "Comum",
-            price: 0,
+            price: undefined, // Use undefined for optional numbers to allow placeholder
             imageUrl: "https://placehold.co/200x280.png",
             available: true,
             copiesAvailable: null,
@@ -214,11 +214,12 @@ export function AdminDashboard() {
         if (editingCard) {
             cardForm.reset({
                 ...editingCard,
+                price: editingCard.price === undefined || editingCard.price === null || isNaN(editingCard.price) ? undefined : Number(editingCard.price),
                 copiesAvailable: editingCard.copiesAvailable === undefined ? null : editingCard.copiesAvailable,
-                eventId: editingCard.eventId === undefined ? null : editingCard.eventId,
+                eventId: editingCard.eventId === undefined || editingCard.eventId === NO_EVENT_SELECTED_VALUE ? null : editingCard.eventId,
             });
         } else {
-            cardForm.reset({ name: "", rarity: "Comum", price: 0, imageUrl: "https://placehold.co/200x280.png", available: true, copiesAvailable: null, eventId: null });
+             cardForm.reset({ name: "", rarity: "Comum", price: undefined, imageUrl: "https://placehold.co/200x280.png", available: true, copiesAvailable: null, eventId: null });
         }
     }, [editingCard, cardForm]);
 
@@ -228,6 +229,7 @@ export function AdminDashboard() {
                 ...editingEvent,
                 startDate: editingEvent.startDate instanceof Date ? editingEvent.startDate : new Date(editingEvent.startDate),
                 endDate: editingEvent.endDate instanceof Date ? editingEvent.endDate : new Date(editingEvent.endDate),
+                bonusMultiplier: editingEvent.bonusMultiplier === undefined || editingEvent.bonusMultiplier === null || isNaN(editingEvent.bonusMultiplier) ? 1 : Number(editingEvent.bonusMultiplier),
             });
         } else {
             eventForm.reset({ name: "", description: "", imageUrl: "https://placehold.co/400x200.png", startDate: undefined, endDate: undefined, bonusMultiplier: 1, linkedCards: []});
@@ -244,6 +246,7 @@ export function AdminDashboard() {
         try {
             const dataToSave = {
                 ...values,
+                price: values.price === undefined || values.price === null || isNaN(values.price) ? 0 : Number(values.price), // Default to 0 if not provided
                 copiesAvailable: values.copiesAvailable === undefined ? null : values.copiesAvailable,
                 eventId: values.eventId === undefined || values.eventId === NO_EVENT_SELECTED_VALUE ? null : values.eventId,
             };
@@ -255,7 +258,7 @@ export function AdminDashboard() {
                 await addDoc(collection(db, "cards"), dataToSave);
                 toast({ title: "Carta Registrada!", description: `A carta "${values.name}" foi adicionada.` });
             }
-            cardForm.reset({ name: "", rarity: "Comum", price: 0, imageUrl: "https://placehold.co/200x280.png", available: true, copiesAvailable: null, eventId: null });
+            cardForm.reset({ name: "", rarity: "Comum", price: undefined, imageUrl: "https://placehold.co/200x280.png", available: true, copiesAvailable: null, eventId: null });
             setEditingCard(null);
         } catch (error: any) {
             console.error("Card submission error: ", error);
@@ -284,6 +287,7 @@ export function AdminDashboard() {
                 ...values,
                 startDate: Timestamp.fromDate(values.startDate),
                 endDate: Timestamp.fromDate(values.endDate),
+                bonusMultiplier: values.bonusMultiplier === undefined || values.bonusMultiplier === null || isNaN(values.bonusMultiplier) ? 1 : Number(values.bonusMultiplier),
             };
             if (editingEvent) {
                 await updateDoc(doc(db, "events", editingEvent.id), eventData);
@@ -372,7 +376,7 @@ export function AdminDashboard() {
                         </CardHeader>
                         <CardContent className="space-y-6">
                             {editingUser && (
-                                 <Form {...userForm}>
+                                 <Form {...userForm} key={editingUser.id}>
                                     <form onSubmit={userForm.handleSubmit(onUserSubmit)} className="space-y-4 p-4 border rounded-lg shadow-sm mb-6 bg-secondary/30">
                                         <h3 className="text-lg font-semibold mb-2">Editando Usuário: {editingUser.name}</h3>
                                          <FormField control={userForm.control} name="name" render={({ field }) => (<FormItem><FormLabel>Nome</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
@@ -440,7 +444,7 @@ export function AdminDashboard() {
                             <CardDescription>{editingCard ? `Editando Carta: ${editingCard.name}` : "Adicionar novas cartas e gerenciar as existentes."}</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-6">
-                             <Form {...cardForm}>
+                             <Form {...cardForm} key={editingCard ? `card-form-${editingCard.id}` : 'card-form-new'}>
                                 <form onSubmit={cardForm.handleSubmit(onCardSubmit)} className="space-y-4 p-4 border rounded-lg shadow-sm bg-secondary/30">
                                      <h3 className="text-lg font-semibold mb-2">{editingCard ? "Editar Carta" : "Adicionar Nova Carta"}</h3>
                                     <FormField control={cardForm.control} name="name" render={({ field }) => (<FormItem><FormLabel>Nome da Carta</FormLabel><FormControl><Input placeholder="Ex: Mascote IFPR Raro" {...field} /></FormControl><FormMessage /></FormItem>)} />
@@ -456,10 +460,9 @@ export function AdminDashboard() {
                                                         type="number"
                                                         placeholder="Ex: 10"
                                                         {...field}
-                                                        value={field.value === undefined || field.value === null || isNaN(field.value as number) ? '' : String(field.value)}
+                                                        value={(field.value !== undefined && field.value !== null && !isNaN(field.value as number)) ? String(field.value) : ''}
                                                         onChange={e => {
                                                             const stringValue = e.target.value;
-                                                            // Pass undefined if empty to allow Zod to coerce and validate correctly
                                                             field.onChange(stringValue === '' ? undefined : stringValue);
                                                         }}
                                                     />
@@ -524,7 +527,7 @@ export function AdminDashboard() {
                                     <FormField control={cardForm.control} name="available" render={({ field }) => (<FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm bg-background"><div className="space-y-0.5"><FormLabel>Disponível na Loja Geral?</FormLabel><FormDescription className="text-xs">Se esta carta pode ser comprada na loja (mesmo fora de evento, se não houver evento vinculado).</FormDescription></div><FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl></FormItem>)} />
                                     <div className="flex gap-2">
                                         <Button type="submit" disabled={isFormProcessing} className="bg-accent hover:bg-accent/90 text-accent-foreground"> {isFormProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <CreditCard className="mr-2 h-4 w-4" />} {editingCard ? "Salvar Alterações" : "Adicionar Carta"}</Button>
-                                        {editingCard && <Button variant="outline" onClick={() => { setEditingCard(null); cardForm.reset({ name: "", rarity: "Comum", price: 0, imageUrl: "https://placehold.co/200x280.png", available: true, copiesAvailable: null, eventId: null }); }} disabled={isFormProcessing}>Cancelar Edição</Button>}
+                                        {editingCard && <Button variant="outline" onClick={() => { setEditingCard(null); cardForm.reset({ name: "", rarity: "Comum", price: undefined, imageUrl: "https://placehold.co/200x280.png", available: true, copiesAvailable: null, eventId: null }); }} disabled={isFormProcessing}>Cancelar Edição</Button>}
                                     </div>
                                 </form>
                             </Form>
@@ -580,7 +583,7 @@ export function AdminDashboard() {
                             <CardDescription>{editingEvent ? `Editando Evento: ${editingEvent.name}`: "Criar e gerenciar eventos especiais."}</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-6">
-                             <Form {...eventForm}>
+                             <Form {...eventForm} key={editingEvent ? `event-form-${editingEvent.id}` : 'event-form-new'}>
                                 <form onSubmit={eventForm.handleSubmit(onEventSubmit)} className="space-y-4 p-4 border rounded-lg shadow-sm bg-secondary/30">
                                      <h3 className="text-lg font-semibold mb-2">{editingEvent ? "Editar Evento" : "Criar Novo Evento"}</h3>
                                      <FormField control={eventForm.control} name="name" render={({ field }) => (<FormItem><FormLabel>Nome do Evento</FormLabel><FormControl><Input placeholder="Ex: Semana da Cultura Nerd" {...field} /></FormControl><FormMessage /></FormItem>)} />
@@ -754,3 +757,6 @@ export function AdminDashboard() {
         </div>
     );
 }
+
+
+      
