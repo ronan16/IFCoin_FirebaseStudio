@@ -19,7 +19,7 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { auth, db, serverTimestamp } from '@/lib/firebase/firebase';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
-import { collection, query, where, getDocs, doc, updateDoc, addDoc, runTransaction, writeBatch, orderBy, Timestamp, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, updateDoc, addDoc, runTransaction, writeBatch, orderBy, Timestamp, onSnapshot, getDoc } from 'firebase/firestore'; // Added getDoc
 import { Separator } from '../ui/separator';
 
 interface StudentData {
@@ -109,12 +109,12 @@ export function TeacherDashboard() {
     useEffect(() => {
         const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
             if (user) {
-                // Fetch teacher's name from their user document if available
                 const teacherDocRef = doc(db, "users", user.uid);
-                getDoc(teacherDocRef).then(docSnap => {
+                getDoc(teacherDocRef).then(docSnap => { // Correctly use getDoc here
                     if (docSnap.exists()) {
                         setTeacherProfile({ uid: user.uid, name: docSnap.data().name || user.email || "Professor" });
                     } else {
+                         // If no specific profile, assume name from auth or default
                         setTeacherProfile({ uid: user.uid, name: user.displayName || user.email || "Professor" });
                     }
                 }).catch(error => {
@@ -123,6 +123,9 @@ export function TeacherDashboard() {
                 });
             } else {
                 setTeacherProfile(null);
+                 // Ensure loading states are handled if user logs out
+                setStudentsLoaded(true); 
+                setHistoryLoaded(true);
             }
         });
         return () => unsubscribeAuth();
@@ -130,7 +133,7 @@ export function TeacherDashboard() {
 
     // Fetch students
     useEffect(() => {
-        setStudentsLoaded(false); // Reset loaded state
+        setStudentsLoaded(false);
         const fetchStudents = async () => {
             try {
                 const q = query(collection(db, "users"), where("role", "==", "student"));
@@ -146,16 +149,23 @@ export function TeacherDashboard() {
                 setStudentsLoaded(true);
             }
         };
-        fetchStudents();
-    }, [toast]);
+        if (teacherProfile) { // Only fetch students if teacher profile is loaded
+           fetchStudents();
+        } else {
+            setAllStudents([]); // Clear students if no teacher profile
+            setFilteredStudents([]);
+            setStudentsLoaded(true); // Mark as loaded to prevent indefinite loading
+        }
+    }, [teacherProfile, toast]); // Rerun if teacherProfile changes
     
     // Fetch reward history for the current teacher
     useEffect(() => {
         if (!teacherProfile) {
-            setHistoryLoaded(true); // No profile, no history to load
+            setRewardHistory([]); // Clear history if no teacher profile
+            setHistoryLoaded(true); // Mark as loaded
             return;
         }
-        setHistoryLoaded(false); // Reset loaded state
+        setHistoryLoaded(false);
         const q = query(collection(db, "rewards_log"), where("teacherId", "==", teacherProfile.uid), orderBy("timestamp", "desc"));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const history = snapshot.docs.map(docSnap => ({id: docSnap.id, ...docSnap.data()} as RewardLog));
@@ -171,12 +181,14 @@ export function TeacherDashboard() {
 
     // Update overall loading state
     useEffect(() => {
-        if (studentsLoaded && historyLoaded) {
+        if (studentsLoaded && historyLoaded && teacherProfile !== null) { // Consider teacherProfile loaded
             setIsLoading(false);
+        } else if (teacherProfile === null && !auth.currentUser) { // If no user logged in, stop loading
+             setIsLoading(false);
         } else {
             setIsLoading(true);
         }
-    }, [studentsLoaded, historyLoaded]);
+    }, [studentsLoaded, historyLoaded, teacherProfile]);
 
 
     // Apply filters
@@ -210,17 +222,25 @@ export function TeacherDashboard() {
             }
             return newSet;
         });
+        // Logic to switch targetType based on selection
         if (selectedStudentIds.size > 0 && targetType !== 'multiple') {
-            form.setValue('targetType', 'multiple');
-        } else if (selectedStudentIds.size === 0 && targetType === 'multiple') {
-            form.setValue('targetType', 'student'); 
+             // This check needs to be against the newSet.size after potential modification
+             const tempSet = new Set(selectedStudentIds);
+             if (tempSet.has(studentId)) tempSet.delete(studentId); else tempSet.add(studentId);
+
+             if (tempSet.size > 0) form.setValue('targetType', 'multiple');
+             else form.setValue('targetType', 'student');
+
+        } else if (selectedStudentIds.size === 1 && selectedStudentIds.has(studentId) && targetType === 'multiple') { // If unselecting the last one
+            form.setValue('targetType', 'student');
         }
     };
 
     const handleSelectAllFiltered = (checked: boolean) => {
         if (checked) {
-            setSelectedStudentIds(new Set(filteredStudents.map(s => s.id)));
-            if (targetType !== 'multiple' && filteredStudents.length > 0) form.setValue('targetType', 'multiple');
+            const newSelectedIds = new Set(filteredStudents.map(s => s.id));
+            setSelectedStudentIds(newSelectedIds);
+            if (newSelectedIds.size > 0 && targetType !== 'multiple') form.setValue('targetType', 'multiple');
         } else {
             setSelectedStudentIds(new Set());
             if (targetType === 'multiple') form.setValue('targetType', 'student');
@@ -277,9 +297,12 @@ export function TeacherDashboard() {
                 }
 
                 const studentRef = doc(db, "users", student.id);
-                // It's safer to fetch the latest student data within a transaction or rely on server-side increments
-                // For client-side, we use the coins value we have, assuming it's reasonably up-to-date
-                const currentCoins = student.coins || 0;
+                const studentDocSnapshot = await getDoc(studentRef); // Get current student data
+                if (!studentDocSnapshot.exists()) {
+                    console.warn(`Aluno ${student.name} (ID: ${student.id}) não encontrado para recompensa.`);
+                    continue;
+                }
+                const currentCoins = studentDocSnapshot.data()?.coins || 0;
                 batch.update(studentRef, { coins: currentCoins + values.coins });
 
                 const rewardLogRef = doc(collection(db, "rewards_log"));
@@ -325,7 +348,7 @@ export function TeacherDashboard() {
     const uniqueCoursesInSystem = ["Todos", ...new Set(allStudents.map(s => s.course).filter(Boolean) as string[])].sort((a,b) => a === "Todos" ? -1 : b === "Todas" ? 1 : a.localeCompare(b));
 
 
-    if (isLoading && !teacherProfile) { 
+    if (isLoading) { 
         return <div className="flex h-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /> Carregando...</div>;
     }
 
@@ -353,7 +376,7 @@ export function TeacherDashboard() {
                                                 onValueChange={(value) => {
                                                     field.onChange(value);
                                                     if (value !== 'multiple') setSelectedStudentIds(new Set());
-                                                    form.setValue('studentId', undefined); // Clear other fields
+                                                    form.setValue('studentId', undefined); 
                                                     form.setValue('turma', undefined);
                                                 }} 
                                                 value={field.value}
@@ -495,9 +518,9 @@ export function TeacherDashboard() {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {isLoading && <tr><TableCell colSpan={6} className="text-center py-4"><Loader2 className="inline h-5 w-5 animate-spin" /> Carregando alunos...</TableCell></tr>}
-                                    {!isLoading && filteredStudents.length === 0 && <tr><TableCell colSpan={6} className="text-center text-muted-foreground py-4">Nenhum aluno encontrado com os filtros atuais.</TableCell></tr>}
-                                    {!isLoading && filteredStudents.length > 0 && filteredStudents.map((student) => (
+                                    {studentsLoaded && filteredStudents.length === 0 && !allStudents.length && <tr><TableCell colSpan={6} className="text-center text-muted-foreground py-4">Nenhum aluno cadastrado no sistema.</TableCell></tr>}
+                                    {studentsLoaded && filteredStudents.length === 0 && allStudents.length > 0 && <tr><TableCell colSpan={6} className="text-center text-muted-foreground py-4">Nenhum aluno encontrado com os filtros atuais.</TableCell></tr>}
+                                    {filteredStudents.map((student) => (
                                         <TableRow key={student.id} data-state={selectedStudentIds.has(student.id) ? "selected" : ""}>
                                             <TableCell>
                                                 <Checkbox
@@ -544,9 +567,8 @@ export function TeacherDashboard() {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {isLoading && rewardHistory.length === 0 && <tr><TableCell colSpan={4} className="text-center py-4"><Loader2 className="inline h-5 w-5 animate-spin" /> Carregando histórico...</TableCell></tr>}
-                                {!isLoading && rewardHistory.length === 0 && <tr><TableCell colSpan={4} className="text-center text-muted-foreground py-4">Nenhuma recompensa enviada ainda.</TableCell></tr>}
-                                {!isLoading && rewardHistory.length > 0 && rewardHistory.map((reward) => (
+                                {historyLoaded && rewardHistory.length === 0 && <tr><TableCell colSpan={4} className="text-center text-muted-foreground py-4">Nenhuma recompensa enviada ainda.</TableCell></tr>}
+                                {rewardHistory.map((reward) => (
                                     <TableRow key={reward.id}>
                                         <TableCell className="font-medium">{reward.studentName} {reward.turma && `(Turma: ${reward.turma})`}</TableCell>
                                         <TableCell className="text-right text-yellow-600 font-semibold">{reward.coinsGiven}</TableCell>
