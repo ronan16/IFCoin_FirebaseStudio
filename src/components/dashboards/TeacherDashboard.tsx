@@ -110,11 +110,10 @@ export function TeacherDashboard() {
         const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
             if (user) {
                 const teacherDocRef = doc(db, "users", user.uid);
-                getDoc(teacherDocRef).then(docSnap => { // Correctly use getDoc here
+                getDoc(teacherDocRef).then(docSnap => { 
                     if (docSnap.exists()) {
                         setTeacherProfile({ uid: user.uid, name: docSnap.data().name || user.email || "Professor" });
                     } else {
-                         // If no specific profile, assume name from auth or default
                         setTeacherProfile({ uid: user.uid, name: user.displayName || user.email || "Professor" });
                     }
                 }).catch(error => {
@@ -123,7 +122,6 @@ export function TeacherDashboard() {
                 });
             } else {
                 setTeacherProfile(null);
-                 // Ensure loading states are handled if user logs out
                 setStudentsLoaded(true); 
                 setHistoryLoaded(true);
             }
@@ -133,6 +131,12 @@ export function TeacherDashboard() {
 
     // Fetch students
     useEffect(() => {
+        if (!teacherProfile) {
+            setAllStudents([]);
+            setFilteredStudents([]);
+            setStudentsLoaded(true);
+            return;
+        }
         setStudentsLoaded(false);
         const fetchStudents = async () => {
             try {
@@ -149,20 +153,14 @@ export function TeacherDashboard() {
                 setStudentsLoaded(true);
             }
         };
-        if (teacherProfile) { // Only fetch students if teacher profile is loaded
-           fetchStudents();
-        } else {
-            setAllStudents([]); // Clear students if no teacher profile
-            setFilteredStudents([]);
-            setStudentsLoaded(true); // Mark as loaded to prevent indefinite loading
-        }
-    }, [teacherProfile, toast]); // Rerun if teacherProfile changes
+        fetchStudents();
+    }, [teacherProfile, toast]);
     
     // Fetch reward history for the current teacher
     useEffect(() => {
         if (!teacherProfile) {
-            setRewardHistory([]); // Clear history if no teacher profile
-            setHistoryLoaded(true); // Mark as loaded
+            setRewardHistory([]); 
+            setHistoryLoaded(true); 
             return;
         }
         setHistoryLoaded(false);
@@ -181,9 +179,9 @@ export function TeacherDashboard() {
 
     // Update overall loading state
     useEffect(() => {
-        if (studentsLoaded && historyLoaded && teacherProfile !== null) { // Consider teacherProfile loaded
+        if (studentsLoaded && historyLoaded && teacherProfile !== null) { 
             setIsLoading(false);
-        } else if (teacherProfile === null && !auth.currentUser) { // If no user logged in, stop loading
+        } else if (teacherProfile === null && !auth.currentUser) { 
              setIsLoading(false);
         } else {
             setIsLoading(true);
@@ -422,7 +420,7 @@ export function TeacherDashboard() {
                                                  <Select onValueChange={field.onChange} value={field.value}>
                                                     <FormControl><SelectTrigger><SelectValue placeholder="Selecione uma turma" /></SelectTrigger></FormControl>
                                                      <SelectContent>
-                                                        {uniqueTurmasInSystem.filter(t => t !== 'Todos').map(turmaName => (
+                                                        {uniqueTurmasInSystem.filter(t => t !== 'Todas').map(turmaName => (
                                                             <SelectItem key={turmaName} value={turmaName}>{turmaName}</SelectItem>
                                                         ))}
                                                      </SelectContent>
@@ -573,7 +571,11 @@ export function TeacherDashboard() {
                                         <TableCell className="font-medium">{reward.studentName} {reward.turma && `(Turma: ${reward.turma})`}</TableCell>
                                         <TableCell className="text-right text-yellow-600 font-semibold">{reward.coinsGiven}</TableCell>
                                         <TableCell>{reward.reason === "Outro" ? reward.customReason : reward.reason}</TableCell>
-                                        <TableCell className="text-xs text-muted-foreground">{reward.timestamp.toDate().toLocaleString('pt-BR')}</TableCell>
+                                        <TableCell className="text-xs text-muted-foreground">
+                                            {reward.timestamp && typeof reward.timestamp.toDate === 'function' 
+                                                ? reward.timestamp.toDate().toLocaleString('pt-BR') 
+                                                : 'Data inválida'}
+                                        </TableCell>
                                     </TableRow>
                                 ))}
                             </TableBody>
