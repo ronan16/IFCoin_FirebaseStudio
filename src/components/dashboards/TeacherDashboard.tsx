@@ -19,7 +19,7 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { auth, db, serverTimestamp } from '@/lib/firebase/firebase';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
-import { collection, query, where, getDocs, doc, updateDoc, addDoc, runTransaction, writeBatch, orderBy, Timestamp, onSnapshot } from 'firebase/firestore'; // Added onSnapshot
+import { collection, query, where, getDocs, doc, updateDoc, addDoc, runTransaction, writeBatch, orderBy, Timestamp, onSnapshot } from 'firebase/firestore';
 import { Separator } from '../ui/separator';
 
 interface StudentData {
@@ -47,19 +47,19 @@ interface RewardLog {
     customReason?: string;
     timestamp: Timestamp;
     teacherName: string;
+    teacherId: string; // Added to fulfill query requirement for history
 }
 
 const coursesList = ["Informática", "Eletrotécnica", "Agroecologia", "Agropecuária", "Sistemas de Informação", "Eng. Agronômica", "Física", "Todos"];
-const turmasList = ["1A", "1B", "2A", "2B", "3A", "3B", "4A", "4B", "TEC1", "TEC2", "Todas"]; // Added N/A for staff/teachers
+const turmasList = ["1A", "1B", "2A", "2B", "3A", "3B", "4A", "4B", "TEC1", "TEC2", "Todas"];
 
 
 const rewardReasons = ["Atividades de aula", "Participação em Evento", "Auxílio com atividades", "Bom comportamento", "Outro"];
 
 const rewardFormSchema = z.object({
   targetType: z.enum(['student', 'turma', 'multiple']).default('student'),
-  studentId: z.string().optional(), // For single student
-  turma: z.string().optional(), // For entire class
-  // selectedStudents: z.array(z.string()).optional(), // For multiple students - handled by component state
+  studentId: z.string().optional(),
+  turma: z.string().optional(),
   coins: z.coerce.number().min(10, { message: "Mínimo de 10 moedas." }).max(100, { message: "Máximo de 100 moedas por vez." }),
   reason: z.string().min(1, {message: "Selecione um motivo."}),
   customReason: z.string().optional(),
@@ -77,7 +77,9 @@ const ONE_HOUR_MS = 60 * 60 * 1000;
 
 export function TeacherDashboard() {
     const { toast } = useToast();
-    const [isLoading, setIsLoading] = useState(true);
+    const [isLoading, setIsLoading] = useState(true); // General loading for the page
+    const [studentsLoaded, setStudentsLoaded] = useState(false);
+    const [historyLoaded, setHistoryLoaded] = useState(false);
     const [isSubmittingReward, setIsSubmittingReward] = useState(false);
     
     const [teacherProfile, setTeacherProfile] = useState<TeacherProfile | null>(null);
@@ -88,7 +90,6 @@ export function TeacherDashboard() {
     const [rewardHistory, setRewardHistory] = useState<RewardLog[]>([]);
     const [lastRewardTimestamps, setLastRewardTimestamps] = useState<Map<string, number>>(new Map());
 
-    // Filters
     const [searchTerm, setSearchTerm] = useState('');
     const [filterCourse, setFilterCourse] = useState('Todos');
     const [filterTurma, setFilterTurma] = useState('Todas');
@@ -108,9 +109,19 @@ export function TeacherDashboard() {
     useEffect(() => {
         const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
             if (user) {
-                setTeacherProfile({ uid: user.uid, name: user.displayName || user.email || "Professor" });
+                // Fetch teacher's name from their user document if available
+                const teacherDocRef = doc(db, "users", user.uid);
+                getDoc(teacherDocRef).then(docSnap => {
+                    if (docSnap.exists()) {
+                        setTeacherProfile({ uid: user.uid, name: docSnap.data().name || user.email || "Professor" });
+                    } else {
+                        setTeacherProfile({ uid: user.uid, name: user.displayName || user.email || "Professor" });
+                    }
+                }).catch(error => {
+                    console.error("Error fetching teacher's name:", error);
+                    setTeacherProfile({ uid: user.uid, name: user.displayName || user.email || "Professor" });
+                });
             } else {
-                // Handle user not logged in, though layout should prevent this page access
                 setTeacherProfile(null);
             }
         });
@@ -119,19 +130,20 @@ export function TeacherDashboard() {
 
     // Fetch students
     useEffect(() => {
-        setIsLoading(true);
+        setStudentsLoaded(false); // Reset loaded state
         const fetchStudents = async () => {
             try {
                 const q = query(collection(db, "users"), where("role", "==", "student"));
                 const querySnapshot = await getDocs(q);
                 const studentsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as StudentData));
+                console.log("[TeacherDashboard] Fetched studentsData from Firestore:", studentsData);
                 setAllStudents(studentsData);
-                setFilteredStudents(studentsData); // Initialize filtered list
+                setFilteredStudents(studentsData); 
             } catch (error) {
                 console.error("Error fetching students:", error);
                 toast({ title: "Erro ao buscar alunos", description: (error as Error).message, variant: "destructive" });
             } finally {
-                setIsLoading(false);
+                setStudentsLoaded(true);
             }
         };
         fetchStudents();
@@ -139,29 +151,42 @@ export function TeacherDashboard() {
     
     // Fetch reward history for the current teacher
     useEffect(() => {
-        if (!teacherProfile) return;
-        setIsLoading(true);
+        if (!teacherProfile) {
+            setHistoryLoaded(true); // No profile, no history to load
+            return;
+        }
+        setHistoryLoaded(false); // Reset loaded state
         const q = query(collection(db, "rewards_log"), where("teacherId", "==", teacherProfile.uid), orderBy("timestamp", "desc"));
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            const history = snapshot.docs.map(doc => ({id: doc.id, ...doc.data()} as RewardLog));
+            const history = snapshot.docs.map(docSnap => ({id: docSnap.id, ...docSnap.data()} as RewardLog));
             setRewardHistory(history);
-            setIsLoading(false);
+            setHistoryLoaded(true);
         }, (error) => {
             console.error("Error fetching reward history:", error);
             toast({ title: "Erro ao buscar histórico", description: error.message, variant: "destructive"});
-            setIsLoading(false);
+            setHistoryLoaded(true);
         });
         return () => unsubscribe();
-
     }, [teacherProfile, toast]);
+
+    // Update overall loading state
+    useEffect(() => {
+        if (studentsLoaded && historyLoaded) {
+            setIsLoading(false);
+        } else {
+            setIsLoading(true);
+        }
+    }, [studentsLoaded, historyLoaded]);
+
 
     // Apply filters
     useEffect(() => {
         let studentsResult = allStudents;
+        console.log("[TeacherDashboard] Applying filters. All students before filtering:", allStudents);
         if (searchTerm) {
             studentsResult = studentsResult.filter(s => 
                 s.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                s.ra?.includes(searchTerm)
+                (s.ra && s.ra.includes(searchTerm))
             );
         }
         if (filterCourse !== 'Todos') {
@@ -170,6 +195,7 @@ export function TeacherDashboard() {
         if (filterTurma !== 'Todas') {
             studentsResult = studentsResult.filter(s => s.turma === filterTurma);
         }
+        console.log("[TeacherDashboard] Filtered students result:", studentsResult);
         setFilteredStudents(studentsResult);
     }, [searchTerm, filterCourse, filterTurma, allStudents]);
 
@@ -184,18 +210,17 @@ export function TeacherDashboard() {
             }
             return newSet;
         });
-         // Update form based on selection for targetType
         if (selectedStudentIds.size > 0 && targetType !== 'multiple') {
             form.setValue('targetType', 'multiple');
         } else if (selectedStudentIds.size === 0 && targetType === 'multiple') {
-            form.setValue('targetType', 'student'); // Revert if all unselected
+            form.setValue('targetType', 'student'); 
         }
     };
 
     const handleSelectAllFiltered = (checked: boolean) => {
         if (checked) {
             setSelectedStudentIds(new Set(filteredStudents.map(s => s.id)));
-            if (targetType !== 'multiple') form.setValue('targetType', 'multiple');
+            if (targetType !== 'multiple' && filteredStudents.length > 0) form.setValue('targetType', 'multiple');
         } else {
             setSelectedStudentIds(new Set());
             if (targetType === 'multiple') form.setValue('targetType', 'student');
@@ -203,11 +228,9 @@ export function TeacherDashboard() {
     };
     
     const canRewardStudent = (studentId: string, amount: number): boolean => {
-        if (amount < 10 || amount > 100) return false; // Basic amount check
+        if (amount < 10 || amount > 100) return false; 
         const lastRewardTime = lastRewardTimestamps.get(studentId);
         if (lastRewardTime && (Date.now() - lastRewardTime) < ONE_HOUR_MS) {
-            // This is a soft check, not foolproof on client.
-            // toast({ title: "Limite Horário", description: `Você já recompensou este aluno recentemente. Tente novamente mais tarde.`, variant: "destructive" });
             return false;
         }
         return true;
@@ -226,7 +249,7 @@ export function TeacherDashboard() {
         if (values.targetType === 'student' && values.studentId) {
             const student = allStudents.find(s => s.id === values.studentId);
             if (student) studentsToReward.push(student);
-        } else if (values.targetType === 'turma' && values.turma) {
+        } else if (values.targetType === 'turma' && values.turma && values.turma !== 'Todas') {
             studentsToReward = allStudents.filter(s => s.turma === values.turma);
         } else if (values.targetType === 'multiple' && selectedStudentIds.size > 0) {
             studentsToReward = allStudents.filter(s => selectedStudentIds.has(s.id));
@@ -241,6 +264,7 @@ export function TeacherDashboard() {
         const now = Date.now();
         const newTimestamps = new Map(lastRewardTimestamps);
         let actuallyRewardedCount = 0;
+        let skippedDueToLimit = 0;
 
         try {
             const batch = writeBatch(db);
@@ -248,10 +272,13 @@ export function TeacherDashboard() {
             for (const student of studentsToReward) {
                 if (!canRewardStudent(student.id, values.coins)) {
                      console.warn(`Limite horário para ${student.name}. Recompensa pulada.`);
-                     continue; // Skip this student
+                     skippedDueToLimit++;
+                     continue; 
                 }
 
                 const studentRef = doc(db, "users", student.id);
+                // It's safer to fetch the latest student data within a transaction or rely on server-side increments
+                // For client-side, we use the coins value we have, assuming it's reasonably up-to-date
                 const currentCoins = student.coins || 0;
                 batch.update(studentRef, { coins: currentCoins + values.coins });
 
@@ -273,15 +300,17 @@ export function TeacherDashboard() {
             
             if (actuallyRewardedCount > 0) {
                 await batch.commit();
-                setLastRewardTimestamps(newTimestamps); // Update timestamps for successfully rewarded
+                setLastRewardTimestamps(newTimestamps);
                 toast({
                     title: "Recompensa Enviada!",
-                    description: `${values.coins} IFCoins foram dados a ${actuallyRewardedCount} aluno(s).`,
+                    description: `${values.coins} IFCoins foram dados a ${actuallyRewardedCount} aluno(s). ${skippedDueToLimit > 0 ? `${skippedDueToLimit} aluno(s) foram pulados devido ao limite horário.` : ''}`,
                 });
-                form.reset({ targetType: 'student', coins: 10, reason: '', customReason: '' });
+                form.reset({ targetType: 'student', studentId: undefined, turma: undefined, coins: 10, reason: '', customReason: '' });
                 setSelectedStudentIds(new Set());
+            } else if (skippedDueToLimit > 0 && studentsToReward.length === skippedDueToLimit) {
+                 toast({ title: "Nenhuma Recompensa Enviada", description: `Todos os ${skippedDueToLimit} aluno(s) selecionados já foram recompensados recentemente.`, variant: "default" });
             } else {
-                 toast({ title: "Nenhuma Recompensa Enviada", description: "Todos os alunos selecionados já foram recompensados recentemente ou a quantidade é inválida.", variant: "default" });
+                 toast({ title: "Nenhuma Recompensa Enviada", description: "Verifique os alunos selecionados e o limite horário.", variant: "default" });
             }
 
         } catch (error) {
@@ -292,11 +321,11 @@ export function TeacherDashboard() {
         }
     }
     
-    const uniqueTurmas = ["Todas", ...new Set(allStudents.map(s => s.turma).filter(Boolean) as string[])];
-    const uniqueCourses = ["Todos", ...new Set(allStudents.map(s => s.course).filter(Boolean) as string[])];
+    const uniqueTurmasInSystem = ["Todas", ...new Set(allStudents.map(s => s.turma).filter(Boolean) as string[])].sort((a,b) => a === "Todas" ? -1 : b === "Todas" ? 1 : a.localeCompare(b));
+    const uniqueCoursesInSystem = ["Todos", ...new Set(allStudents.map(s => s.course).filter(Boolean) as string[])].sort((a,b) => a === "Todos" ? -1 : b === "Todas" ? 1 : a.localeCompare(b));
 
 
-    if (isLoading && !teacherProfile) { // Initial loading for teacher profile
+    if (isLoading && !teacherProfile) { 
         return <div className="flex h-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /> Carregando...</div>;
     }
 
@@ -306,7 +335,6 @@ export function TeacherDashboard() {
             <p className="text-muted-foreground">Bem-vindo, {teacherProfile?.name}. Recompense seus alunos e acompanhe o progresso.</p>
 
             <div className="grid gap-6 lg:grid-cols-3">
-                {/* Reward Card */}
                 <Card className="lg:col-span-1 shadow-sm">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2"><Gift className="h-5 w-5 text-accent" /> Recompensar Alunos</CardTitle>
@@ -321,12 +349,15 @@ export function TeacherDashboard() {
                                     render={({ field }) => (
                                         <FormItem>
                                             <FormLabel>Tipo de Alvo</FormLabel>
-                                            <Select onValueChange={(value) => {
-                                                field.onChange(value);
-                                                if (value !== 'multiple') setSelectedStudentIds(new Set()); // Clear multi-selection if not choosing 'multiple'
-                                                if (value === 'student') form.setValue('turma', undefined);
-                                                if (value === 'turma') form.setValue('studentId', undefined);
-                                            }} value={field.value}>
+                                            <Select 
+                                                onValueChange={(value) => {
+                                                    field.onChange(value);
+                                                    if (value !== 'multiple') setSelectedStudentIds(new Set());
+                                                    form.setValue('studentId', undefined); // Clear other fields
+                                                    form.setValue('turma', undefined);
+                                                }} 
+                                                value={field.value}
+                                            >
                                                 <FormControl><SelectTrigger><SelectValue placeholder="Selecione Aluno ou Turma" /></SelectTrigger></FormControl>
                                                 <SelectContent>
                                                     <SelectItem value="student">Aluno Individual</SelectItem>
@@ -347,7 +378,7 @@ export function TeacherDashboard() {
                                                 <Select onValueChange={field.onChange} value={field.value}>
                                                      <FormControl><SelectTrigger><SelectValue placeholder="Selecione um aluno" /></SelectTrigger></FormControl>
                                                      <SelectContent><ScrollArea className="h-[200px]">
-                                                        {allStudents.map(student => (
+                                                        {allStudents.sort((a,b) => a.name.localeCompare(b.name)).map(student => (
                                                             <SelectItem key={student.id} value={student.id} disabled={!canRewardStudent(student.id, form.getValues('coins')) && !!lastRewardTimestamps.get(student.id)}>
                                                                 {student.name} ({student.ra}) - {student.turma}
                                                                 {!canRewardStudent(student.id, form.getValues('coins')) && !!lastRewardTimestamps.get(student.id) && <span className="text-xs text-destructive ml-1">(Limite)</span>}
@@ -368,7 +399,7 @@ export function TeacherDashboard() {
                                                  <Select onValueChange={field.onChange} value={field.value}>
                                                     <FormControl><SelectTrigger><SelectValue placeholder="Selecione uma turma" /></SelectTrigger></FormControl>
                                                      <SelectContent>
-                                                        {uniqueTurmas.filter(t => t !== 'Todas').map(turmaName => ( // Exclude "Todas" from targetable turmas
+                                                        {uniqueTurmasInSystem.filter(t => t !== 'Todos').map(turmaName => (
                                                             <SelectItem key={turmaName} value={turmaName}>{turmaName}</SelectItem>
                                                         ))}
                                                      </SelectContent>
@@ -416,7 +447,7 @@ export function TeacherDashboard() {
                                         )}
                                     />
                                 )}
-                                <Button type="submit" className="w-full bg-accent hover:bg-accent/90" disabled={isSubmittingReward || (targetType === 'multiple' && selectedStudentIds.size === 0) || (targetType === 'student' && !form.getValues('studentId')) || (targetType === 'turma' && !form.getValues('turma'))}>
+                                <Button type="submit" className="w-full bg-accent hover:bg-accent/90" disabled={isSubmittingReward || (targetType === 'multiple' && selectedStudentIds.size === 0) || (targetType === 'student' && !form.getValues('studentId')) || (targetType === 'turma' && (!form.getValues('turma') || form.getValues('turma') === 'Todas'))}>
                                     {isSubmittingReward ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Gift className="mr-2 h-4 w-4" />} Enviar Recompensa
                                 </Button>
                                 <FormDescription className="text-xs flex items-center gap-1">
@@ -427,7 +458,6 @@ export function TeacherDashboard() {
                     </CardContent>
                 </Card>
 
-                {/* Student List / Search and Filters */}
                 <Card className="lg:col-span-2 shadow-sm">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2"><Users className="h-5 w-5" /> Lista de Alunos</CardTitle>
@@ -436,11 +466,11 @@ export function TeacherDashboard() {
                             <Input placeholder="Buscar por Nome/RA..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="md:col-span-1" />
                             <Select value={filterCourse} onValueChange={setFilterCourse}>
                                 <SelectTrigger><Filter className="h-3 w-3 mr-1" /> <SelectValue placeholder="Filtrar por Curso" /></SelectTrigger>
-                                <SelectContent>{uniqueCourses.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                                <SelectContent>{uniqueCoursesInSystem.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
                             </Select>
                             <Select value={filterTurma} onValueChange={setFilterTurma}>
                                 <SelectTrigger><Filter className="h-3 w-3 mr-1" /> <SelectValue placeholder="Filtrar por Turma" /></SelectTrigger>
-                                <SelectContent>{uniqueTurmas.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                                <SelectContent>{uniqueTurmasInSystem.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
                             </Select>
                         </div>
                     </CardHeader>
@@ -451,7 +481,7 @@ export function TeacherDashboard() {
                                     <TableRow>
                                         <TableHead className="w-[50px]">
                                             <Checkbox 
-                                                checked={filteredStudents.length > 0 && selectedStudentIds.size === filteredStudents.length}
+                                                checked={filteredStudents.length > 0 && selectedStudentIds.size === filteredStudents.length && filteredStudents.every(s => selectedStudentIds.has(s.id))}
                                                 onCheckedChange={(checked) => handleSelectAllFiltered(Boolean(checked))}
                                                 aria-label="Selecionar todos os filtrados"
                                                 disabled={filteredStudents.length === 0}
@@ -465,16 +495,16 @@ export function TeacherDashboard() {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {isLoading && filteredStudents.length === 0 && <tr><TableCell colSpan={6} className="text-center py-4"><Loader2 className="inline h-5 w-5 animate-spin" /> Carregando alunos...</TableCell></tr>}
+                                    {isLoading && <tr><TableCell colSpan={6} className="text-center py-4"><Loader2 className="inline h-5 w-5 animate-spin" /> Carregando alunos...</TableCell></tr>}
                                     {!isLoading && filteredStudents.length === 0 && <tr><TableCell colSpan={6} className="text-center text-muted-foreground py-4">Nenhum aluno encontrado com os filtros atuais.</TableCell></tr>}
-                                    {filteredStudents.map((student) => (
+                                    {!isLoading && filteredStudents.length > 0 && filteredStudents.map((student) => (
                                         <TableRow key={student.id} data-state={selectedStudentIds.has(student.id) ? "selected" : ""}>
                                             <TableCell>
                                                 <Checkbox
                                                     checked={selectedStudentIds.has(student.id)}
                                                     onCheckedChange={() => handleSelectStudent(student.id)}
                                                     aria-label={`Selecionar ${student.name}`}
-                                                    disabled={!canRewardStudent(student.id, form.getValues('coins')) && !!lastRewardTimestamps.get(student.id) && form.getValues('targetType') !== 'student'}
+                                                    disabled={!canRewardStudent(student.id, form.getValues('coins')) && !!lastRewardTimestamps.get(student.id) && targetType !== 'student'}
                                                 />
                                             </TableCell>
                                             <TableCell className="font-medium">{student.name}</TableCell>
@@ -497,7 +527,6 @@ export function TeacherDashboard() {
             
             <Separator className="my-6" />
 
-            {/* Reward History Card */}
             <Card className="shadow-sm">
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2"><History className="h-5 w-5" /> Histórico de Recompensas</CardTitle>
@@ -517,7 +546,7 @@ export function TeacherDashboard() {
                             <TableBody>
                                 {isLoading && rewardHistory.length === 0 && <tr><TableCell colSpan={4} className="text-center py-4"><Loader2 className="inline h-5 w-5 animate-spin" /> Carregando histórico...</TableCell></tr>}
                                 {!isLoading && rewardHistory.length === 0 && <tr><TableCell colSpan={4} className="text-center text-muted-foreground py-4">Nenhuma recompensa enviada ainda.</TableCell></tr>}
-                                {rewardHistory.map((reward) => (
+                                {!isLoading && rewardHistory.length > 0 && rewardHistory.map((reward) => (
                                     <TableRow key={reward.id}>
                                         <TableCell className="font-medium">{reward.studentName} {reward.turma && `(Turma: ${reward.turma})`}</TableCell>
                                         <TableCell className="text-right text-yellow-600 font-semibold">{reward.coinsGiven}</TableCell>
@@ -533,3 +562,4 @@ export function TeacherDashboard() {
         </div>
     );
 }
+
