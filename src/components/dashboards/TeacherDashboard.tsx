@@ -21,6 +21,7 @@ import { auth, db, serverTimestamp } from '@/lib/firebase/firebase';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { collection, query, where, getDocs, doc, updateDoc, addDoc, runTransaction, writeBatch, orderBy, Timestamp, onSnapshot, getDoc } from 'firebase/firestore'; // Added getDoc
 import { Separator } from '../ui/separator';
+import { Badge } from "@/components/ui/badge"; // Added Badge import
 
 interface StudentData {
     id: string;
