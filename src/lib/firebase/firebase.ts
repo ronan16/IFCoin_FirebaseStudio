@@ -7,16 +7,14 @@ import { getDatabase } from "firebase/database";
 // https://firebase.google.com/docs/web/setup#available-libraries
 
 // Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-  // measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID // Optional
+  apiKey: "AIzaSyAMyEMbkvu3tbUR92R7ed2Z5pGoofEqIoI",
+  authDomain: "ifcoins-digital.firebaseapp.com",
+  projectId: "ifcoins-digital",
+  storageBucket: "ifcoins-digital.appspot.com", // Corrected from firebasestorage.app
+  messagingSenderId: "108334824506",
+  appId: "1:108334824506:web:a6e637d677ee3000c18903",
+  // databaseURL: "https://ifcoins-digital-default-rtdb.firebaseio.com" // Optional: Add if you need to specify RTDB region, otherwise it's derived.
 };
 
 // Initialize Firebase
@@ -28,16 +26,10 @@ if (!getApps().length) {
 }
 
 const auth = getAuth(app);
-const database = getDatabase(app);
+const database = getDatabase(app); // If you are using Realtime Database
 
 export { app, auth, database };
 
-// Ensure you have the necessary environment variables set in your .env.local file
-// Example .env.local:
-// NEXT_PUBLIC_FIREBASE_API_KEY=YOUR_API_KEY
-// NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=YOUR_AUTH_DOMAIN
-// NEXT_PUBLIC_FIREBASE_DATABASE_URL=YOUR_DATABASE_URL
-// NEXT_PUBLIC_FIREBASE_PROJECT_ID=YOUR_PROJECT_ID
-// NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=YOUR_STORAGE_BUCKET
-// NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=YOUR_MESSAGING_SENDER_ID
-// NEXT_PUBLIC_FIREBASE_APP_ID=YOUR_APP_ID
+// Note: Environment variables for Firebase config are generally recommended for security
+// and different environments (dev, prod). For this update, I've used the direct values.
+// If you want to switch back to using .env.local variables, you can update this file accordingly.
