@@ -95,7 +95,7 @@ const eventSchema = z.object({
     imageUrl: z.string().url("URL da imagem inválida.").default("https://placehold.co/400x200.png"),
     startDate: z.date({ required_error: "Data de início é obrigatória." }),
     endDate: z.date({ required_error: "Data de término é obrigatória." }),
-    bonusMultiplier: z.coerce.number().min(1, "Multiplicador deve ser no mínimo 1.").max(10, "Multiplicador máximo é 10.").default(1),
+    bonusMultiplier: z.coerce.number().min(1, "Multiplicador deve ser no mínimo 1.").max(20, "Multiplicador máximo é 20.").default(1),
     linkedCards: z.array(z.string()).optional(),
 }).refine((data) => data.endDate >= data.startDate, {
     message: "Data de término deve ser igual ou posterior à data de início.",
@@ -456,9 +456,10 @@ export function AdminDashboard() {
                                                         type="number"
                                                         placeholder="Ex: 10"
                                                         {...field}
-                                                        value={(field.value !== undefined && field.value !== null && !isNaN(field.value as number)) ? String(field.value) : ''}
+                                                        value={field.value === undefined || field.value === null || isNaN(field.value as number) ? '' : String(field.value)}
                                                         onChange={e => {
                                                             const stringValue = e.target.value;
+                                                            // Pass undefined if empty to allow Zod to coerce and validate correctly
                                                             field.onChange(stringValue === '' ? undefined : stringValue);
                                                         }}
                                                     />
@@ -479,10 +480,10 @@ export function AdminDashboard() {
                                                         type="number" 
                                                         placeholder="Deixe em branco para ilimitado" 
                                                         {...field} 
-                                                        value={(field.value !== undefined && field.value !== null && !isNaN(field.value as number)) ? String(field.value) : ''} 
+                                                        value={field.value === undefined || field.value === null || isNaN(field.value as number) ? '' : String(field.value)}
                                                         onChange={e => {
                                                             const val = e.target.value;
-                                                            field.onChange(val === '' ? null : parseInt(val, 10)); // Pass null if empty
+                                                            field.onChange(val === '' ? null : parseInt(val, 10)); 
                                                         }}
                                                     />
                                                 </FormControl>
@@ -501,7 +502,7 @@ export function AdminDashboard() {
                                                     onValueChange={(selectedValue) => {
                                                         field.onChange(selectedValue === NO_EVENT_SELECTED_VALUE ? null : selectedValue);
                                                     }}
-                                                    value={field.value || NO_EVENT_SELECTED_VALUE}
+                                                    value={field.value ?? NO_EVENT_SELECTED_VALUE}
                                                 >
                                                     <FormControl>
                                                         <SelectTrigger>
@@ -583,7 +584,7 @@ export function AdminDashboard() {
                                 <form onSubmit={eventForm.handleSubmit(onEventSubmit)} className="space-y-4 p-4 border rounded-lg shadow-sm bg-secondary/30">
                                      <h3 className="text-lg font-semibold mb-2">{editingEvent ? "Editar Evento" : "Criar Novo Evento"}</h3>
                                      <FormField control={eventForm.control} name="name" render={({ field }) => (<FormItem><FormLabel>Nome do Evento</FormLabel><FormControl><Input placeholder="Ex: Semana da Cultura Nerd" {...field} /></FormControl><FormMessage /></FormItem>)} />
-                                     <FormField control={eventForm.control} name="description" render={({ field }) => (<FormItem><FormLabel>Descrição do Evento</FormLabel><FormControl><Textarea placeholder="Detalhes sobre o evento, como participar, etc." {...field} /></FormControl><FormMessage /></FormItem>)} />
+                                     <FormField control={eventForm.control} name="description" render={({ field }) => (<FormItem><FormLabel>Descrição do Evento</FormLabel><FormControl><Textarea placeholder="Detalhes sobre o evento, como participar, etc." rows={3} {...field} /></FormControl><FormMessage /></FormItem>)} />
                                      <FormField control={eventForm.control} name="imageUrl" render={({ field }) => (<FormItem><FormLabel>URL da Imagem do Evento</FormLabel><FormControl><Input type="url" placeholder="https://placehold.co/400x200.png" {...field} /></FormControl><FormDescription className="text-xs">Imagem de capa para o evento.</FormDescription><FormMessage /></FormItem>)} />
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                          <FormField control={eventForm.control} name="startDate" render={({ field }) => (<FormItem className="flex flex-col"><FormLabel>Data de Início</FormLabel><DatePicker date={field.value} setDate={field.onChange} /><FormMessage /></FormItem>)} />
@@ -598,7 +599,8 @@ export function AdminDashboard() {
                                                 <FormControl>
                                                     <Input 
                                                         type="number" 
-                                                        min="1" 
+                                                        min="1"
+                                                        max="20"
                                                         step="0.1" 
                                                         placeholder="Ex: 1.5 (para 50% a mais)" 
                                                         {...field} 
@@ -609,7 +611,7 @@ export function AdminDashboard() {
                                                         }}
                                                     />
                                                 </FormControl>
-                                                <FormDescription className="text-xs">Quantas vezes mais moedas serão ganhas durante o evento (ex: 2 para o dobro).</FormDescription>
+                                                <FormDescription className="text-xs">Quantas vezes mais moedas serão ganhas durante o evento (ex: 2 para o dobro). Entre 1.0 e 20.0.</FormDescription>
                                                 <FormMessage />
                                             </FormItem>
                                         )} 
@@ -752,5 +754,3 @@ export function AdminDashboard() {
         </div>
     );
 }
-
-    
