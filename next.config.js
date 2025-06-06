@@ -35,12 +35,12 @@ const nextConfig: NextConfig = {
         port: '',
         pathname: '/**',
       },
-      {
-        protocol: 'https',
-        hostname: 'firebasestorage.googleapis.com', // Added for Firebase Storage
-        port: '',
-        pathname: '/**',
-      }
+      // {
+      //   protocol: 'https',
+      //   hostname: 'firebasestorage.googleapis.com', // No longer primary for form image inputs
+      //   port: '',
+      //   pathname: '/**',
+      // }
     ],
   },
 };

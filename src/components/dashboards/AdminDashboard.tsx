@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { UserPlus, CreditCard, CalendarPlus, Settings, BarChart3, Upload, Star, Users, AlertTriangle, Coins, Loader2, Edit3, Trash2, ImageIcon, UploadCloud } from "lucide-react"; // Added UploadCloud
+import { UserPlus, CreditCard, CalendarPlus, Settings, BarChart3, Upload, Star, Users, AlertTriangle, Coins, Loader2, Edit3, Trash2, ImageIcon, UserCircle } from "lucide-react"; // Changed UploadCloud
 import { useToast } from "@/hooks/use-toast";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, Controller } from "react-hook-form";
@@ -21,10 +21,11 @@ import { Switch } from "@/components/ui/switch";
 import { DatePicker } from '@/components/ui/date-picker';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { db, storage, serverTimestamp } from '@/lib/firebase/firebase'; // Added storage
+import { db, serverTimestamp } from '@/lib/firebase/firebase'; // Storage removed from direct import
 import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, where, onSnapshot, Timestamp } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage"; // Added Firebase Storage functions
-import NextImage from 'next/image'; // Renamed to avoid conflict
+// Firebase Storage imports are no longer needed here
+// import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage"; 
+import NextImage from 'next/image'; 
 import {
   AlertDialog,
   AlertDialogAction,
@@ -50,7 +51,7 @@ interface UserData {
     coins?: number;
     course?: string;
     turma?: string;
-    avatarUrl?: string; // Added avatarUrl
+    avatarUrl?: string; 
 }
 
 interface CardData {
@@ -58,7 +59,7 @@ interface CardData {
     name: string;
     rarity: "Comum" | "Raro" | "Lendário" | "Mítico";
     imageUrl: string;
-    imagePath?: string; // To store storage path for deletion
+    // imagePath?: string; // No longer needed
     available: boolean;
     copiesAvailable?: number | null;
     eventId?: string | null;
@@ -71,7 +72,7 @@ interface EventData {
     startDate: Date;
     endDate: Date;
     imageUrl: string;
-    imagePath?: string; // To store storage path for deletion
+    // imagePath?: string; // No longer needed
     description: string;
     bonusMultiplier: number;
     status?: 'Ativo' | 'Agendado' | 'Concluído';
@@ -79,8 +80,7 @@ interface EventData {
 }
 
 const NO_EVENT_SELECTED_VALUE = "_NONE_";
-const MAX_FILE_SIZE_MB = 5;
-const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
+// Constants for file validation are no longer needed
 
 const userManagementSchema = z.object({
     name: z.string().min(3, { message: "Nome deve ter pelo menos 3 caracteres." }),
@@ -89,21 +89,14 @@ const userManagementSchema = z.object({
     course: z.string().min(1, { message: "Selecione um curso." }),
     turma: z.string().min(1, { message: "Selecione uma turma." }),
     role: z.enum(['student', 'teacher', 'staff', 'admin']).default('student'),
-    avatar: z.instanceof(File).optional()
-      .refine(file => !file || file.size <= MAX_FILE_SIZE_MB * 1024 * 1024, `Tamanho máximo ${MAX_FILE_SIZE_MB}MB.`)
-      .refine(file => !file || ACCEPTED_IMAGE_TYPES.includes(file.type), "Apenas .jpg, .jpeg, .png, .webp."),
-    currentAvatarUrl: z.string().optional(), // To hold existing avatar URL
+    avatarUrl: z.string().url({ message: "URL do avatar inválida." }).optional().or(z.literal('')),
 });
 
 const cardSchema = z.object({
     name: z.string().min(3, "Nome da carta deve ter pelo menos 3 caracteres."),
     rarity: z.enum(["Comum", "Raro", "Lendário", "Mítico"]),
     price: z.coerce.number().min(0, "Preço deve ser positivo ou zero.").optional().default(0),
-    imageFile: z.instanceof(File).optional()
-      .refine(file => !file || file.size <= MAX_FILE_SIZE_MB * 1024 * 1024, `Tamanho máximo ${MAX_FILE_SIZE_MB}MB.`)
-      .refine(file => !file || ACCEPTED_IMAGE_TYPES.includes(file.type), "Apenas .jpg, .jpeg, .png, .webp."),
-    imageUrl: z.string().optional().default("https://placehold.co/200x280.png"), // Will hold the URL from Storage or placeholder
-    currentImagePath: z.string().optional(), // For deleting old image
+    imageUrl: z.string().url({ message: "URL da imagem inválida."}).optional().or(z.literal('')).default("https://placehold.co/200x280.png"),
     available: z.boolean().default(true),
     copiesAvailable: z.coerce.number().int("Deve ser um número inteiro.").positive("Deve ser positivo.").optional().nullable().transform(val => val === undefined || val === null || isNaN(val) ? null : Number(val)),
     eventId: z.string().optional().nullable().transform(val => (val === "" || val === undefined || val === NO_EVENT_SELECTED_VALUE) ? null : val),
@@ -112,11 +105,7 @@ const cardSchema = z.object({
 const eventSchema = z.object({
     name: z.string().min(3, "Nome do evento é muito curto."),
     description: z.string().min(10, "Descrição deve ter pelo menos 10 caracteres.").optional().or(z.literal('')),
-    imageFile: z.instanceof(File).optional()
-      .refine(file => !file || file.size <= MAX_FILE_SIZE_MB * 1024 * 1024, `Tamanho máximo ${MAX_FILE_SIZE_MB}MB.`)
-      .refine(file => !file || ACCEPTED_IMAGE_TYPES.includes(file.type), "Apenas .jpg, .jpeg, .png, .webp."),
-    imageUrl: z.string().optional().default("https://placehold.co/400x200.png"),
-    currentImagePath: z.string().optional(),
+    imageUrl: z.string().url({ message: "URL da imagem inválida."}).optional().or(z.literal('')).default("https://placehold.co/400x200.png"),
     startDate: z.date({ required_error: "Data de início é obrigatória." }),
     endDate: z.date({ required_error: "Data de término é obrigatória." }),
     bonusMultiplier: z.coerce.number().min(1, "Multiplicador deve ser no mínimo 1.").max(20, "Multiplicador máximo é 20.").default(1),
@@ -141,9 +130,11 @@ export function AdminDashboard() {
     const [editingCard, setEditingCard] = useState<CardData | null>(null);
     const [editingEvent, setEditingEvent] = useState<EventData | null>(null);
     
-    const [cardImagePreview, setCardImagePreview] = useState<string | null>(null);
-    const [eventImagePreview, setEventImagePreview] = useState<string | null>(null);
+    // Image preview states are still useful for URL inputs
+    const [cardImagePreview, setCardImagePreview] = useState<string | null>("https://placehold.co/200x280.png");
+    const [eventImagePreview, setEventImagePreview] = useState<string | null>("https://placehold.co/400x200.png");
     const [userAvatarPreview, setUserAvatarPreview] = useState<string | null>(null);
+
 
     const [usersLoaded, setUsersLoaded] = useState(false);
     const [cardsLoaded, setCardsLoaded] = useState(false);
@@ -205,18 +196,47 @@ export function AdminDashboard() {
 
     const cardForm = useForm<z.infer<typeof cardSchema>>({
         resolver: zodResolver(cardSchema),
-        defaultValues: { name: "", rarity: "Comum", price: 0, imageUrl: "https://placehold.co/200x280.png", imageFile: undefined, currentImagePath: undefined, available: true, copiesAvailable: null, eventId: null },
+        defaultValues: { name: "", rarity: "Comum", price: 0, imageUrl: "https://placehold.co/200x280.png", available: true, copiesAvailable: null, eventId: null },
     });
 
     const eventForm = useForm<z.infer<typeof eventSchema>>({
         resolver: zodResolver(eventSchema),
-        defaultValues: { name: "", description: "", imageUrl: "https://placehold.co/400x200.png", imageFile: undefined, currentImagePath: undefined, startDate: undefined, endDate: undefined, bonusMultiplier: 1, linkedCards: [] },
+        defaultValues: { name: "", description: "", imageUrl: "https://placehold.co/400x200.png", startDate: undefined, endDate: undefined, bonusMultiplier: 1, linkedCards: [] },
     });
 
     const userForm = useForm<z.infer<typeof userManagementSchema>>({
         resolver: zodResolver(userManagementSchema),
-        defaultValues: { name: "", ra: "", email: "", course: "", turma: "", role: "student", avatar: undefined, currentAvatarUrl: undefined },
+        defaultValues: { name: "", ra: "", email: "", course: "", turma: "", role: "student", avatarUrl: "" },
     });
+    
+    // Update image previews based on URL input fields
+    const cardImageUrlValue = cardForm.watch("imageUrl");
+    useEffect(() => {
+        if (cardImageUrlValue && cardImageUrlValue.startsWith('http')) {
+            setCardImagePreview(cardImageUrlValue);
+        } else if (!editingCard) { // only reset to placeholder if not editing or url is invalid
+            setCardImagePreview("https://placehold.co/200x280.png");
+        }
+    }, [cardImageUrlValue, editingCard]);
+
+    const eventImageUrlValue = eventForm.watch("imageUrl");
+    useEffect(() => {
+        if (eventImageUrlValue && eventImageUrlValue.startsWith('http')) {
+            setEventImagePreview(eventImageUrlValue);
+        } else if (!editingEvent) {
+            setEventImagePreview("https://placehold.co/400x200.png");
+        }
+    }, [eventImageUrlValue, editingEvent]);
+    
+    const userAvatarUrlValue = userForm.watch("avatarUrl");
+    useEffect(() => {
+        if (userAvatarUrlValue && userAvatarUrlValue.startsWith('http')) {
+            setUserAvatarPreview(userAvatarUrlValue);
+        } else if (!editingUser) {
+            setUserAvatarPreview(null);
+        }
+    }, [userAvatarUrlValue, editingUser]);
+
 
     useEffect(() => {
         if (editingCard) {
@@ -225,12 +245,11 @@ export function AdminDashboard() {
                 price: editingCard.price === undefined || editingCard.price === null || isNaN(editingCard.price) ? 0 : Number(editingCard.price),
                 copiesAvailable: editingCard.copiesAvailable === undefined ? null : editingCard.copiesAvailable,
                 eventId: editingCard.eventId === undefined || editingCard.eventId === NO_EVENT_SELECTED_VALUE ? null : editingCard.eventId,
-                imageFile: undefined, // Reset file input
-                currentImagePath: editingCard.imagePath, // Keep track of old path
+                imageUrl: editingCard.imageUrl || "https://placehold.co/200x280.png",
             });
             setCardImagePreview(editingCard.imageUrl || "https://placehold.co/200x280.png");
         } else {
-             cardForm.reset({ name: "", rarity: "Comum", price: 0, imageUrl: "https://placehold.co/200x280.png", imageFile: undefined, currentImagePath: undefined, available: true, copiesAvailable: null, eventId: null });
+             cardForm.reset({ name: "", rarity: "Comum", price: 0, imageUrl: "https://placehold.co/200x280.png", available: true, copiesAvailable: null, eventId: null });
              setCardImagePreview("https://placehold.co/200x280.png");
         }
     }, [editingCard, cardForm]);
@@ -242,12 +261,11 @@ export function AdminDashboard() {
                 startDate: editingEvent.startDate instanceof Date ? editingEvent.startDate : new Date(editingEvent.startDate),
                 endDate: editingEvent.endDate instanceof Date ? editingEvent.endDate : new Date(editingEvent.endDate),
                 bonusMultiplier: editingEvent.bonusMultiplier === undefined || editingEvent.bonusMultiplier === null || isNaN(editingEvent.bonusMultiplier) ? 1 : Number(editingEvent.bonusMultiplier),
-                imageFile: undefined,
-                currentImagePath: editingEvent.imagePath,
+                imageUrl: editingEvent.imageUrl || "https://placehold.co/400x200.png",
             });
             setEventImagePreview(editingEvent.imageUrl || "https://placehold.co/400x200.png");
         } else {
-            eventForm.reset({ name: "", description: "", imageUrl: "https://placehold.co/400x200.png", imageFile: undefined, currentImagePath: undefined, startDate: undefined, endDate: undefined, bonusMultiplier: 1, linkedCards: []});
+            eventForm.reset({ name: "", description: "", imageUrl: "https://placehold.co/400x200.png", startDate: undefined, endDate: undefined, bonusMultiplier: 1, linkedCards: []});
             setEventImagePreview("https://placehold.co/400x200.png");
         }
     }, [editingEvent, eventForm]);
@@ -259,67 +277,24 @@ export function AdminDashboard() {
                 ra: editingUser.ra || "", 
                 course: editingUser.course || "",
                 turma: editingUser.turma || "",
-                avatar: undefined,
-                currentAvatarUrl: editingUser.avatarUrl,
+                avatarUrl: editingUser.avatarUrl || "",
             });
             setUserAvatarPreview(editingUser.avatarUrl || null);
         } else {
-            userForm.reset({ name: "", ra: "", email: "", course: "", turma:"", role: "student", avatar: undefined, currentAvatarUrl: undefined });
+            userForm.reset({ name: "", ra: "", email: "", course: "", turma:"", role: "student", avatarUrl: "" });
             setUserAvatarPreview(null);
         }
     }, [editingUser, userForm]);
     
-    const handleImageChange = (
-      event: React.ChangeEvent<HTMLInputElement>,
-      setPreview: (url: string | null) => void,
-      formSetFile: (file: File | undefined) => void
-    ) => {
-        const file = event.target.files?.[0];
-        if (file) {
-            formSetFile(file);
-            const reader = new FileReader();
-            reader.onloadend = () => setPreview(reader.result as string);
-            reader.readAsDataURL(file);
-        } else {
-            formSetFile(undefined);
-            setPreview(null); // Or set to a default placeholder
-        }
-    };
-
 
     async function onCardSubmit(values: z.infer<typeof cardSchema>) {
         setIsFormProcessing(true);
-        let imageUrl = values.imageUrl;
-        let imagePath = values.currentImagePath;
-
         try {
-            if (values.imageFile) {
-                // Delete old image if one exists and a new one is uploaded
-                if (values.currentImagePath) {
-                    try {
-                        const oldImageRef = ref(storage, values.currentImagePath);
-                        await deleteObject(oldImageRef);
-                    } catch (deleteError: any) {
-                        // Log if old image deletion fails, but don't block new upload
-                        console.warn("Could not delete old card image:", deleteError.message);
-                         if (deleteError.code !== 'storage/object-not-found') { // only toast if it's not a "not found" error
-                            toast({ title: "Aviso", description: "Não foi possível remover a imagem antiga do card.", variant: "default" });
-                         }
-                    }
-                }
-                const newImagePath = `card_images/${Date.now()}_${values.imageFile.name}`;
-                const imageRef = ref(storage, newImagePath);
-                await uploadBytes(imageRef, values.imageFile);
-                imageUrl = await getDownloadURL(imageRef);
-                imagePath = newImagePath; // Store the new path
-            }
-
             const dataToSave = {
                 name: values.name,
                 rarity: values.rarity,
                 price: values.price === undefined || values.price === null || isNaN(values.price) ? 0 : Number(values.price),
-                imageUrl: imageUrl,
-                imagePath: imagePath, // Save the storage path
+                imageUrl: values.imageUrl || "https://placehold.co/200x280.png", // Use provided URL or placeholder
                 available: values.available,
                 copiesAvailable: values.copiesAvailable === undefined ? null : values.copiesAvailable,
                 eventId: values.eventId === undefined || values.eventId === NO_EVENT_SELECTED_VALUE ? null : values.eventId,
@@ -332,7 +307,7 @@ export function AdminDashboard() {
                 await addDoc(collection(db, "cards"), dataToSave);
                 toast({ title: "Carta Registrada!", description: `A carta "${values.name}" foi adicionada.` });
             }
-            cardForm.reset({ name: "", rarity: "Comum", price: 0, imageUrl: "https://placehold.co/200x280.png", imageFile: undefined, currentImagePath: undefined, available: true, copiesAvailable: null, eventId: null });
+            cardForm.reset({ name: "", rarity: "Comum", price: 0, imageUrl: "https://placehold.co/200x280.png", available: true, copiesAvailable: null, eventId: null });
             setCardImagePreview("https://placehold.co/200x280.png");
             setEditingCard(null);
         } catch (error: any) {
@@ -346,20 +321,7 @@ export function AdminDashboard() {
     async function deleteCard(cardToDelete: CardData) {
         setIsFormProcessing(true);
         try {
-            // Delete image from storage if path exists
-            if (cardToDelete.imagePath) {
-                try {
-                    const imageRef = ref(storage, cardToDelete.imagePath);
-                    await deleteObject(imageRef);
-                } catch (storageError: any) {
-                     if (storageError.code !== 'storage/object-not-found') {
-                        toast({ title: "Erro ao Excluir Imagem do Card", description: storageError.message, variant: "destructive" });
-                        setIsFormProcessing(false);
-                        return; // Stop if image deletion fails (unless it's 'not found')
-                     }
-                     console.warn("Card image not found in storage, proceeding with Firestore deletion:", cardToDelete.imagePath);
-                }
-            }
+            // No need to delete from storage as we are using URLs
             await deleteDoc(doc(db, "cards", cardToDelete.id));
             toast({ title: "Carta Excluída!", description: "A carta foi removida do sistema." });
         } catch (error: any) {
@@ -371,34 +333,11 @@ export function AdminDashboard() {
 
      async function onEventSubmit(values: z.infer<typeof eventSchema>) {
         setIsFormProcessing(true);
-        let imageUrl = values.imageUrl;
-        let imagePath = values.currentImagePath;
-
         try {
-            if (values.imageFile) {
-                if (values.currentImagePath) {
-                     try {
-                        const oldImageRef = ref(storage, values.currentImagePath);
-                        await deleteObject(oldImageRef);
-                    } catch (deleteError: any) {
-                        console.warn("Could not delete old event image:", deleteError.message);
-                         if (deleteError.code !== 'storage/object-not-found') {
-                            toast({ title: "Aviso", description: "Não foi possível remover a imagem antiga do evento.", variant: "default" });
-                         }
-                    }
-                }
-                const newImagePath = `event_images/${Date.now()}_${values.imageFile.name}`;
-                const imageRef = ref(storage, newImagePath);
-                await uploadBytes(imageRef, values.imageFile);
-                imageUrl = await getDownloadURL(imageRef);
-                imagePath = newImagePath;
-            }
-
             const eventDataToSave = {
                 name: values.name,
                 description: values.description,
-                imageUrl: imageUrl,
-                imagePath: imagePath,
+                imageUrl: values.imageUrl || "https://placehold.co/400x200.png",
                 startDate: Timestamp.fromDate(values.startDate),
                 endDate: Timestamp.fromDate(values.endDate),
                 bonusMultiplier: values.bonusMultiplier === undefined || values.bonusMultiplier === null || isNaN(values.bonusMultiplier) ? 1 : Number(values.bonusMultiplier),
@@ -412,7 +351,7 @@ export function AdminDashboard() {
                 await addDoc(collection(db, "events"), eventDataToSave);
                 toast({ title: "Evento Criado!", description: `O evento "${values.name}" foi criado.` });
             }
-            eventForm.reset({ name: "", description: "", imageUrl: "https://placehold.co/400x200.png", imageFile: undefined, currentImagePath: undefined, startDate: undefined, endDate: undefined, bonusMultiplier: 1, linkedCards: []});
+            eventForm.reset({ name: "", description: "", imageUrl: "https://placehold.co/400x200.png", startDate: undefined, endDate: undefined, bonusMultiplier: 1, linkedCards: []});
             setEventImagePreview("https://placehold.co/400x200.png");
             setEditingEvent(null);
         } catch (error: any) {
@@ -426,19 +365,7 @@ export function AdminDashboard() {
     async function deleteEvent(eventToDelete: EventData) {
         setIsFormProcessing(true);
         try {
-            if (eventToDelete.imagePath) {
-                try {
-                    const imageRef = ref(storage, eventToDelete.imagePath);
-                    await deleteObject(imageRef);
-                } catch (storageError: any) {
-                    if (storageError.code !== 'storage/object-not-found') {
-                        toast({ title: "Erro ao Excluir Imagem do Evento", description: storageError.message, variant: "destructive" });
-                        setIsFormProcessing(false);
-                        return;
-                    }
-                    console.warn("Event image not found in storage, proceeding with Firestore deletion:", eventToDelete.imagePath);
-                }
-            }
+            // No need to delete from storage
             await deleteDoc(doc(db, "events", eventToDelete.id));
             toast({ title: "Evento Excluído!", description: "O evento foi removido do sistema." });
         } catch (error: any) {
@@ -452,44 +379,20 @@ export function AdminDashboard() {
         setIsFormProcessing(true);
         try {
             if (editingUser) {
-                let newAvatarUrl = editingUser.avatarUrl; // Keep current if no new one
-                let newAvatarPath; // For storage path
-
-                if (values.avatar) { // New avatar uploaded
-                    // Delete old avatar if it exists and is not a placeholder
-                    if (editingUser.avatarUrl && !editingUser.avatarUrl.includes("avatar.vercel.sh") && !editingUser.avatarUrl.includes("placehold.co")) {
-                        try {
-                            // Attempt to derive path, or store path in user doc if more robust deletion needed
-                            // For simplicity, this example assumes we might not have the full path.
-                            // A better approach is to store avatarStoragePath in the user document.
-                            const oldAvatarRef = ref(storage, editingUser.avatarUrl); // This works if URL is direct storage URL
-                            await deleteObject(oldAvatarRef).catch(e => console.warn("Could not delete old avatar (it might not exist or URL is not a direct path):", e.message));
-                        } catch (deleteError: any) {
-                             console.warn("Could not delete old avatar by URL:", deleteError.message);
-                        }
-                    }
-                    // Upload new avatar
-                    newAvatarPath = `user_avatars/${editingUser.id}/${values.avatar.name}`;
-                    const avatarRef = ref(storage, newAvatarPath);
-                    await uploadBytes(avatarRef, values.avatar);
-                    newAvatarUrl = await getDownloadURL(avatarRef);
-                }
-
                 await updateDoc(doc(db, "users", editingUser.id), {
                     name: values.name,
                     ra: values.ra,
-                    email: values.email, // Email change should be handled via Firebase Auth re-authentication for security
+                    email: values.email, 
                     course: values.course,
                     turma: values.turma,
                     role: values.role,
-                    avatarUrl: newAvatarUrl, // Update avatar URL
-                    // avatarPath: newAvatarPath, // Optionally store the path
+                    avatarUrl: values.avatarUrl || "", 
                 });
                 toast({ title: "Usuário Atualizado!", description: `Os dados de "${values.name}" foram atualizados.` });
             } else {
                 toast({ title: "Ação não suportada", description: "Criação de novos usuários por aqui não é o método principal. Use a tela de registro.", variant: "destructive" });
             }
-            userForm.reset({ name: "", ra: "", email: "", course: "", turma:"", role: "student", avatar: undefined, currentAvatarUrl: undefined });
+            userForm.reset({ name: "", ra: "", email: "", course: "", turma:"", role: "student", avatarUrl: "" });
             setUserAvatarPreview(null);
             setEditingUser(null);
         } catch (error: any) {
@@ -538,24 +441,24 @@ export function AdminDashboard() {
                                         <h3 className="text-lg font-semibold mb-2">Editando Usuário: {editingUser.name}</h3>
                                         <FormField
                                             control={userForm.control}
-                                            name="avatar"
+                                            name="avatarUrl"
                                             render={({ field }) => (
                                                 <FormItem>
-                                                <FormLabel>Foto de Perfil</FormLabel>
+                                                <FormLabel>URL da Foto de Perfil</FormLabel>
                                                 <FormControl>
                                                     <div className="flex items-center gap-4">
                                                     {userAvatarPreview ? (
-                                                        <NextImage src={userAvatarPreview} alt="Prévia do Avatar" width={64} height={64} className="rounded-full object-cover h-16 w-16" />
+                                                        <NextImage src={userAvatarPreview} alt="Prévia do Avatar" width={64} height={64} className="rounded-full object-cover h-16 w-16" data-ai-hint="user avatar" />
                                                     ) : (
                                                         <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center text-muted-foreground">
-                                                            <UploadCloud size={32} />
+                                                            <UserCircle size={32} />
                                                         </div>
                                                     )}
                                                     <Input 
-                                                        type="file" 
-                                                        accept="image/*" 
-                                                        onChange={(e) => handleImageChange(e, setUserAvatarPreview, (file) => form.setValue('avatar', file))}
-                                                        className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
+                                                        type="url" 
+                                                        placeholder="https://exemplo.com/avatar.png"
+                                                        {...field}
+                                                        className="block w-full"
                                                     />
                                                     </div>
                                                 </FormControl>
@@ -571,7 +474,7 @@ export function AdminDashboard() {
                                          <FormField control={userForm.control} name="role" render={({ field }) => (<FormItem><FormLabel>Função</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl><SelectContent><SelectItem value="student">Aluno</SelectItem><SelectItem value="teacher">Professor</SelectItem><SelectItem value="staff">Servidor</SelectItem><SelectItem value="admin">Admin</SelectItem></SelectContent></Select><FormMessage /></FormItem>)} />
                                         <div className="flex gap-2">
                                             <Button type="submit" disabled={isFormProcessing} className="bg-accent hover:bg-accent/90 text-accent-foreground"> {isFormProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <UserPlus className="mr-2 h-4 w-4" />} Salvar Usuário</Button>
-                                            <Button variant="outline" onClick={() => { setEditingUser(null); userForm.reset({ name: "", ra: "", email: "", course: "", turma: "", role: "student", avatar: undefined, currentAvatarUrl: undefined }); setUserAvatarPreview(null); }} disabled={isFormProcessing}>Cancelar</Button>
+                                            <Button variant="outline" onClick={() => { setEditingUser(null); userForm.reset({ name: "", ra: "", email: "", course: "", turma: "", role: "student", avatarUrl: "" }); setUserAvatarPreview(null); }} disabled={isFormProcessing}>Cancelar</Button>
                                         </div>
                                     </form>
                                 </Form>
@@ -644,26 +547,25 @@ export function AdminDashboard() {
                                     <FormField control={cardForm.control} name="name" render={({ field }) => (<FormItem><FormLabel>Nome da Carta</FormLabel><FormControl><Input placeholder="Ex: Mascote IFPR Raro" {...field} /></FormControl><FormMessage /></FormItem>)} />
                                     <FormField
                                         control={cardForm.control}
-                                        name="imageFile"
+                                        name="imageUrl"
                                         render={({ field }) => (
                                             <FormItem>
-                                            <FormLabel>Imagem da Carta</FormLabel>
+                                            <FormLabel>URL da Imagem da Carta</FormLabel>
                                             <FormControl>
                                                 <div className="flex items-center gap-4">
-                                                {cardImagePreview ? (
-                                                    <NextImage src={cardImagePreview} alt="Prévia da Carta" width={100} height={140} className="rounded-md border object-contain h-36 w-auto" />
+                                                {cardImagePreview && cardImagePreview.startsWith('http') ? (
+                                                    <NextImage src={cardImagePreview} alt="Prévia da Carta" width={100} height={140} className="rounded-md border object-contain h-36 w-auto" data-ai-hint="card game preview" />
                                                 ) : (
                                                      <div className="h-36 w-24 rounded-md bg-muted flex items-center justify-center text-muted-foreground"><ImageIcon size={32}/></div>
                                                 )}
                                                 <Input 
-                                                    type="file" 
-                                                    accept="image/*" 
-                                                    onChange={(e) => handleImageChange(e, setCardImagePreview, (file) => cardForm.setValue('imageFile', file))}
-                                                    className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
+                                                    type="url" 
+                                                    placeholder="https://exemplo.com/imagem.png"
+                                                    {...field}
+                                                    className="block w-full"
                                                 />
                                                 </div>
                                             </FormControl>
-                                            <FormDescription className="text-xs">Faça upload de uma nova imagem ou mantenha a atual. Max {MAX_FILE_SIZE_MB}MB.</FormDescription>
                                             <FormMessage />
                                             </FormItem>
                                         )}
@@ -675,7 +577,7 @@ export function AdminDashboard() {
                                      <FormField control={cardForm.control} name="available" render={({ field }) => (<FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm bg-background"><div className="space-y-0.5"><FormLabel>Disponível na Loja Geral?</FormLabel><FormDescription className="text-xs">Se esta carta pode ser comprada na loja (mesmo fora de evento, se não houver evento vinculado).</FormDescription></div><FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl></FormItem>)} />
                                     <div className="flex gap-2">
                                         <Button type="submit" disabled={isFormProcessing} className="bg-accent hover:bg-accent/90 text-accent-foreground"> {isFormProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <CreditCard className="mr-2 h-4 w-4" />} {editingCard ? "Salvar Alterações" : "Adicionar Carta"}</Button>
-                                        {editingCard && <Button variant="outline" onClick={() => { setEditingCard(null); cardForm.reset({ name: "", rarity: "Comum", price: 0, imageUrl: "https://placehold.co/200x280.png", imageFile: undefined, currentImagePath: undefined, available: true, copiesAvailable: null, eventId: null }); setCardImagePreview("https://placehold.co/200x280.png"); }} disabled={isFormProcessing}>Cancelar Edição</Button>}
+                                        {editingCard && <Button variant="outline" onClick={() => { setEditingCard(null); cardForm.reset({ name: "", rarity: "Comum", price: 0, imageUrl: "https://placehold.co/200x280.png", available: true, copiesAvailable: null, eventId: null }); setCardImagePreview("https://placehold.co/200x280.png"); }} disabled={isFormProcessing}>Cancelar Edição</Button>}
                                     </div>
                                 </form>
                             </Form>
@@ -703,7 +605,7 @@ export function AdminDashboard() {
                                                             <Button variant="ghost" size="icon" className="hover:text-destructive" disabled={isFormProcessing}><Trash2 className="h-4 w-4"/></Button>
                                                         </AlertDialogTrigger>
                                                         <AlertDialogContent>
-                                                            <AlertDialogHeader><AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle><AlertDialogDescription>Tem certeza que deseja excluir a carta "{card.name}"? Esta ação não pode ser desfeita e a imagem associada será removida.</AlertDialogDescription></AlertDialogHeader>
+                                                            <AlertDialogHeader><AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle><AlertDialogDescription>Tem certeza que deseja excluir a carta "{card.name}"? Esta ação não pode ser desfeita.</AlertDialogDescription></AlertDialogHeader>
                                                             <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => deleteCard(card)} className="bg-destructive hover:bg-destructive/90" disabled={isFormProcessing}>Excluir</AlertDialogAction></AlertDialogFooter>
                                                         </AlertDialogContent>
                                                     </AlertDialog>
@@ -733,26 +635,25 @@ export function AdminDashboard() {
                                      <FormField control={eventForm.control} name="name" render={({ field }) => (<FormItem><FormLabel>Nome do Evento</FormLabel><FormControl><Input placeholder="Ex: Semana da Cultura Nerd" {...field} /></FormControl><FormMessage /></FormItem>)} />
                                      <FormField
                                         control={eventForm.control}
-                                        name="imageFile"
+                                        name="imageUrl"
                                         render={({ field }) => (
                                             <FormItem>
-                                            <FormLabel>Imagem do Evento</FormLabel>
+                                            <FormLabel>URL da Imagem do Evento</FormLabel>
                                             <FormControl>
                                                 <div className="flex items-center gap-4">
-                                                {eventImagePreview ? (
-                                                    <NextImage src={eventImagePreview} alt="Prévia do Evento" width={160} height={90} className="rounded-md border object-contain h-24 w-auto" />
+                                                {eventImagePreview && eventImagePreview.startsWith('http') ? (
+                                                    <NextImage src={eventImagePreview} alt="Prévia do Evento" width={160} height={90} className="rounded-md border object-contain h-24 w-auto" data-ai-hint="event banner preview" />
                                                 ) : (
                                                     <div className="h-24 w-40 rounded-md bg-muted flex items-center justify-center text-muted-foreground"><ImageIcon size={32}/></div>
                                                 )}
                                                 <Input 
-                                                    type="file" 
-                                                    accept="image/*" 
-                                                    onChange={(e) => handleImageChange(e, setEventImagePreview, (file) => eventForm.setValue('imageFile', file))}
-                                                    className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
+                                                    type="url" 
+                                                    placeholder="https://exemplo.com/banner.png"
+                                                    {...field}
+                                                    className="block w-full"
                                                 />
                                                 </div>
                                             </FormControl>
-                                            <FormDescription className="text-xs">Faça upload de uma nova imagem ou mantenha a atual. Max {MAX_FILE_SIZE_MB}MB.</FormDescription>
                                             <FormMessage />
                                             </FormItem>
                                         )}
@@ -765,7 +666,7 @@ export function AdminDashboard() {
                                      <FormField control={eventForm.control} name="bonusMultiplier" render={({ field }) => ( <FormItem><FormLabel>Multiplicador de Bônus de IFCoins</FormLabel><FormControl><Input type="number" min="1" max="20" step="0.1" placeholder="Ex: 1.5 (para 50% a mais)" {...field} value={(field.value !== undefined && field.value !== null && !isNaN(field.value as number)) ? String(field.value) : ''} onChange={e => { const val = e.target.value; field.onChange(val === '' ? undefined : parseFloat(val)); }} /></FormControl><FormDescription className="text-xs">Quantas vezes mais moedas serão ganhas durante o evento (ex: 2 para o dobro). Entre 1.0 e 20.0.</FormDescription><FormMessage /></FormItem>)} />
                                     <div className="flex gap-2">
                                         <Button type="submit" disabled={isFormProcessing} className="bg-accent hover:bg-accent/90 text-accent-foreground">{isFormProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <CalendarPlus className="mr-2 h-4 w-4" />} {editingEvent ? "Salvar Alterações" : "Salvar Evento"}</Button>
-                                        {editingEvent && <Button variant="outline" onClick={() => { setEditingEvent(null); eventForm.reset({ name: "", description: "", imageUrl: "https://placehold.co/400x200.png", imageFile: undefined, currentImagePath: undefined, startDate: undefined, endDate: undefined, bonusMultiplier: 1, linkedCards: []}); setEventImagePreview("https://placehold.co/400x200.png"); }} disabled={isFormProcessing}>Cancelar Edição</Button>}
+                                        {editingEvent && <Button variant="outline" onClick={() => { setEditingEvent(null); eventForm.reset({ name: "", description: "", imageUrl: "https://placehold.co/400x200.png", startDate: undefined, endDate: undefined, bonusMultiplier: 1, linkedCards: []}); setEventImagePreview("https://placehold.co/400x200.png"); }} disabled={isFormProcessing}>Cancelar Edição</Button>}
                                     </div>
                                 </form>
                              </Form>
@@ -793,7 +694,7 @@ export function AdminDashboard() {
                                                             <Button variant="ghost" size="icon" className="hover:text-destructive" disabled={isFormProcessing}><Trash2 className="h-4 w-4"/></Button>
                                                         </AlertDialogTrigger>
                                                         <AlertDialogContent>
-                                                            <AlertDialogHeader><AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle><AlertDialogDescription>Tem certeza que deseja excluir o evento "{event.name}"? Esta ação não pode ser desfeita e a imagem associada será removida.</AlertDialogDescription></AlertDialogHeader>
+                                                            <AlertDialogHeader><AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle><AlertDialogDescription>Tem certeza que deseja excluir o evento "{event.name}"? Esta ação não pode ser desfeita.</AlertDialogDescription></AlertDialogHeader>
                                                             <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => deleteEvent(event)} className="bg-destructive hover:bg-destructive/90" disabled={isFormProcessing}>Excluir</AlertDialogAction></AlertDialogFooter>
                                                         </AlertDialogContent>
                                                     </AlertDialog>
