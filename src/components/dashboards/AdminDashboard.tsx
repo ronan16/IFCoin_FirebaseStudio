@@ -78,7 +78,7 @@ const NO_EVENT_SELECTED_VALUE = "_NONE_";
 
 const userManagementSchema = z.object({
     name: z.string().min(3, { message: "Nome deve ter pelo menos 3 caracteres." }),
-    ra: z.string().regex(/^\d*$/, { message: "RA deve conter apenas números ou estar vazio." }).optional().or(z.literal('')),
+    ra: z.string().regex(/^[a-zA-Z0-9]*$/, { message: "RA deve conter apenas letras e números ou estar vazio." }).optional().or(z.literal('')),
     email: z.string().email({ message: "Email inválido." }),
     course: z.string().min(1, { message: "Selecione um curso." }),
     turma: z.string().min(1, { message: "Selecione uma turma." }),
@@ -251,7 +251,7 @@ export function AdminDashboard() {
                 turma: editingUser.turma || "",
             });
         } else {
-            userForm.reset({ name: "", ra: "", email: "", course: "", turma: "", role: "student" });
+            userForm.reset({ name: "", ra: "", email: "", course: "", turma:"", role: "student" });
         }
     }, [editingUser, userForm]);
 
@@ -400,7 +400,7 @@ export function AdminDashboard() {
                                         <h3 className="text-lg font-semibold mb-2">Editando Usuário: {editingUser.name}</h3>
                                          <FormField control={userForm.control} name="name" render={({ field }) => (<FormItem><FormLabel>Nome</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
                                          <FormField control={userForm.control} name="email" render={({ field }) => (<FormItem><FormLabel>Email</FormLabel><FormControl><Input type="email" {...field} /></FormControl><FormMessage /></FormItem>)} />
-                                         <FormField control={userForm.control} name="ra" render={({ field }) => (<FormItem><FormLabel>RA</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>)} />
+                                         <FormField control={userForm.control} name="ra" render={({ field }) => (<FormItem><FormLabel>RA</FormLabel><FormControl><Input placeholder="Ex: 20251IVA10030013" {...field} /></FormControl><FormMessage /></FormItem>)} />
                                          <FormField
                                             control={userForm.control}
                                             name="course"

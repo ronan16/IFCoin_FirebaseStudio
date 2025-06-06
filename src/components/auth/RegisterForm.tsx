@@ -29,7 +29,7 @@ const turmasList = ["1A", "1B", "2A", "2B", "3A", "3B", "4A", "4B", "TEC1", "TEC
 
 const formSchema = z.object({
   name: z.string().min(3, { message: "O nome deve ter pelo menos 3 caracteres." }),
-  ra: z.string().regex(/^\d+$/, { message: "RA deve conter apenas números." }).min(5, { message: "RA deve ter pelo menos 5 dígitos." }),
+  ra: z.string().regex(/^[a-zA-Z0-9]+$/, { message: "RA deve conter apenas letras e números." }).min(5, { message: "RA deve ter pelo menos 5 caracteres." }),
   email: z.string().email({ message: "Por favor, insira um email válido." }),
   course: z.string().min(1, { message: "Selecione um curso." }),
   turma: z.string().min(1, { message: "Selecione uma turma." }), // Added Turma
@@ -128,7 +128,7 @@ export function RegisterForm() {
             <FormItem>
               <FormLabel>RA (Registro Acadêmico)</FormLabel>
               <FormControl>
-                <Input type="text" placeholder="Seu número de RA" {...field} disabled={isLoading} />
+                <Input type="text" placeholder="Seu número de RA (Ex: 20251IVA10030013)" {...field} disabled={isLoading} />
               </FormControl>
               <FormMessage />
             </FormItem>
