@@ -6,13 +6,14 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Trophy, Coins, Gem, User, Loader2 } from "lucide-react"; // Added Loader2
+import { Trophy, Coins, Gem, User, Loader2 } from "lucide-react"; 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { auth, db } from '@/lib/firebase/firebase'; // Import auth and db
+import { auth, db } from '@/lib/firebase/firebase'; 
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
+import NextImage from 'next/image'; // For Firebase Storage images
 
 interface RankedUser {
     id: string;
@@ -21,8 +22,7 @@ interface RankedUser {
     initials: string;
     coins: number;
     course: string;
-    cardsCollected: number; // Unique cards
-    // totalCards?: number; // Sum of quantities - consider for future if needed
+    cardsCollected: number; 
 }
 
 export default function RankingsPage() {
@@ -37,7 +37,6 @@ export default function RankingsPage() {
                 setCurrentUserId(user.uid);
             } else {
                 setCurrentUserId(null);
-                // Potentially redirect if no user, though layout should handle this
             }
         });
         return () => unsubscribeAuth();
@@ -48,7 +47,6 @@ export default function RankingsPage() {
             setIsLoading(true);
             try {
                 const usersRef = collection(db, "users");
-                // Query for students only
                 const q = query(usersRef, where("role", "==", "student"));
                 const querySnapshot = await getDocs(q);
                 
@@ -66,17 +64,14 @@ export default function RankingsPage() {
                     });
                 });
 
-                // Sort for Top Coin Holders
                 const sortedByCoins = [...allStudents].sort((a, b) => b.coins - a.coins);
                 setTopCoinHolders(sortedByCoins);
 
-                // Sort for Top Collectors (by unique cards collected)
                 const sortedByCollections = [...allStudents].sort((a, b) => b.cardsCollected - a.cardsCollected);
                 setTopCollectors(sortedByCollections);
 
             } catch (error) {
                 console.error("Error fetching rankings:", error);
-                // Handle error (e.g., show toast)
             } finally {
                 setIsLoading(false);
             }
@@ -88,8 +83,8 @@ export default function RankingsPage() {
 
     const getRankCellStyle = (rank: number) => {
         if (rank === 1) return "text-yellow-500 font-bold";
-        if (rank === 2) return "text-gray-500 font-semibold"; // Adjusted for better visibility
-        if (rank === 3) return "text-orange-600 font-semibold"; // Bronze
+        if (rank === 2) return "text-gray-500 font-semibold"; 
+        if (rank === 3) return "text-orange-600 font-semibold"; 
         return "text-muted-foreground";
     };
 
@@ -140,7 +135,7 @@ export default function RankingsPage() {
                                                 <TableCell>
                                                     <div className="flex items-center gap-3">
                                                         <Avatar className="h-8 w-8">
-                                                            <AvatarImage src={user.avatarUrl || `https://avatar.vercel.sh/${user.id}.png?size=40`} alt={user.name} />
+                                                             <AvatarImage src={user.avatarUrl || `https://avatar.vercel.sh/${user.id}.png?size=40`} alt={user.name} />
                                                             <AvatarFallback>{user.initials}</AvatarFallback>
                                                         </Avatar>
                                                         <span className="font-medium">{user.name}</span>
@@ -177,7 +172,6 @@ export default function RankingsPage() {
                                             <TableHead>Aluno</TableHead>
                                              <TableHead>Curso</TableHead>
                                             <TableHead className="text-center">Cartas Únicas</TableHead>
-                                            {/* <TableHead className="text-right">Total de Cartas</TableHead> */}
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
@@ -198,7 +192,6 @@ export default function RankingsPage() {
                                                 </TableCell>
                                                  <TableCell className="text-sm text-muted-foreground">{user.course}</TableCell>
                                                 <TableCell className="text-center font-semibold text-blue-600">{user.cardsCollected}</TableCell>
-                                                {/* <TableCell className="text-right font-medium text-muted-foreground">{user.totalCards}</TableCell> */}
                                             </TableRow>
                                         ))}
                                         {topCollectors.length === 0 && (

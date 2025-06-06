@@ -19,7 +19,7 @@ import {
   Coins,
   Bell,
   Loader2,
-  Award, // For Teacher Panel
+  Award, 
 } from "lucide-react";
 
 import {
@@ -49,7 +49,7 @@ import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { auth, db } from "@/lib/firebase/firebase"; 
 import { onAuthStateChanged, signOut, User as FirebaseUser } from "firebase/auth"; 
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, onSnapshot } from "firebase/firestore"; // Added onSnapshot
 
 
 type NavItem = {
@@ -61,13 +61,13 @@ type NavItem = {
 };
 
 const navItems: NavItem[] = [
-  { href: "/dashboard", icon: Home, label: "Início", roles: ['student'] }, // Student only
+  { href: "/dashboard", icon: Home, label: "Início", roles: ['student'] }, 
   { href: "/dashboard/shop", icon: ShoppingBag, label: "Loja", roles: ['student'] },
   { href: "/dashboard/collection", icon: LayoutGrid, label: "Coleção", roles: ['student'] },
   { href: "/dashboard/trades", icon: Repeat, label: "Trocas", roles: ['student'] },
   { href: "/dashboard/events", icon: Calendar, label: "Eventos", roles: ['student', 'teacher', 'staff', 'admin'] },
   { href: "/dashboard/rankings", icon: Trophy, label: "Rankings", roles: ['student', 'teacher', 'staff', 'admin'] },
-  { href: "/dashboard/teacher", icon: Award, label: "Painel Professor", roles: ['teacher', 'staff'] }, // Using Award icon
+  { href: "/dashboard/teacher", icon: Award, label: "Painel Professor", roles: ['teacher', 'staff'] }, 
   { href: "/dashboard/admin", icon: UserCog, label: "Painel Admin", roles: ['admin'] },
 ];
 
@@ -79,7 +79,7 @@ interface UserProfile {
   initials: string;
   coins?: number; 
   course?: string; 
-  turma?: string; // Added Turma
+  turma?: string; 
   uid: string;
 }
 
@@ -95,60 +95,70 @@ export default function DashboardLayout({
   const [isLoadingAuth, setIsLoadingAuth] = React.useState(true);
 
   React.useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       setIsLoadingAuth(true);
       if (user) {
         setCurrentUser(user);
         const userDocRef = doc(db, "users", user.uid);
-        const userDocSnap = await getDoc(userDocRef);
-        if (userDocSnap.exists()) {
-          const data = userDocSnap.data();
-          setUserProfile({
-            uid: user.uid,
-            name: data.name || "Usuário",
-            email: user.email || "email@desconhecido.com",
-            role: data.role || "student",
-            course: data.course || "Não definido",
-            turma: data.turma || "Não definida",
-            initials: (data.name || "U").substring(0, 2).toUpperCase(),
-            coins: data.coins, // Coins might be undefined for teachers/admins
-            avatarUrl: data.avatarUrl, 
-          });
-        } else {
-          // Fallback for hardcoded admin if Firestore profile is missing
-          if (user.email === 'admin@admin.com') {
+        
+        // Use onSnapshot for real-time updates to user profile (e.g., avatar, coins)
+        const unsubscribeProfile = onSnapshot(userDocRef, (userDocSnap) => {
+          if (userDocSnap.exists()) {
+            const data = userDocSnap.data();
             setUserProfile({
-                uid: user.uid,
-                name: "Admin Master",
-                email: user.email,
-                role: 'admin',
-                course: "Administração",
-                turma: "N/A",
-                initials: "AM",
-                // coins: 9999, // Admins typically don't have game coins
-             });
-          } else { // Default to student if no doc and not admin email
-            setUserProfile({
-                uid: user.uid,
-                name: user.displayName || "Usuário",
-                email: user.email || "desconhecido@ifpr.edu.br",
-                role: 'student', 
-                course: "Não definido",
-                turma: "Não definida",
-                initials: (user.displayName || "U").substring(0,1).toUpperCase(),
-                coins: 0,
+              uid: user.uid,
+              name: data.name || "Usuário",
+              email: user.email || "email@desconhecido.com",
+              role: data.role || "student",
+              course: data.course || "Não definido",
+              turma: data.turma || "Não definida",
+              initials: (data.name || "U").substring(0, 2).toUpperCase(),
+              coins: data.coins, 
+              avatarUrl: data.avatarUrl, 
             });
+          } else {
+            if (user.email === 'admin@admin.com') {
+              setUserProfile({
+                  uid: user.uid,
+                  name: "Admin Master",
+                  email: user.email,
+                  role: 'admin',
+                  course: "Administração",
+                  turma: "N/A",
+                  initials: "AM",
+                  avatarUrl: undefined, // Or a default admin avatar
+               });
+            } else { 
+              setUserProfile({
+                  uid: user.uid,
+                  name: user.displayName || "Usuário",
+                  email: user.email || "desconhecido@ifpr.edu.br",
+                  role: 'student', 
+                  course: "Não definido",
+                  turma: "Não definida",
+                  initials: (user.displayName || "U").substring(0,1).toUpperCase(),
+                  coins: 0,
+                  avatarUrl: undefined,
+              });
+            }
+            console.warn("User document not found in Firestore for UID:", user.uid, "- Using default/fallback profile.");
           }
-          console.warn("User document not found in Firestore for UID:", user.uid, "- Using default/fallback profile.");
-        }
+          setIsLoadingAuth(false); // Set loading false after profile is processed
+        }, (error) => {
+            console.error("Error fetching user profile with onSnapshot:", error);
+            setIsLoadingAuth(false); // Also set loading false on error
+        });
+        
+        return () => unsubscribeProfile(); // Cleanup profile listener
+
       } else {
         setCurrentUser(null);
         setUserProfile(null);
         router.push("/"); 
+        setIsLoadingAuth(false);
       }
-      setIsLoadingAuth(false);
     });
-    return () => unsubscribe();
+    return () => unsubscribeAuth(); // Cleanup auth listener
   }, [router]);
 
   const handleLogout = async () => {
@@ -168,15 +178,12 @@ export default function DashboardLayout({
     );
   }
 
-  // Filter nav items based on user role
-  // Also, specific redirect for /dashboard if user is not student
   let filteredNavItems = navItems.filter(item => userProfile && item.roles.includes(userProfile.role));
   if (userProfile.role === 'teacher' || userProfile.role === 'staff') {
       filteredNavItems = navItems.filter(item => item.roles.includes(userProfile.role) && item.href !== '/dashboard');
   } else if (userProfile.role === 'admin') {
       filteredNavItems = navItems.filter(item => item.roles.includes(userProfile.role) && item.href !== '/dashboard');
   }
-
 
   const currentNavItem = navItems.find(item => pathname === item.href || (pathname.startsWith(item.href) && item.href !== '/dashboard'));
   
@@ -296,12 +303,12 @@ export default function DashboardLayout({
                          <p className="text-xs leading-none text-muted-foreground">
                             {userProfile.email}
                          </p>
-                         {userProfile.course && (userProfile.role === 'student' || userProfile.role === 'teacher') && ( // Show course for students and teachers
+                         {userProfile.course && (userProfile.role === 'student' || userProfile.role === 'teacher') && ( 
                             <p className="text-xs leading-none text-muted-foreground">
                                 Curso: {userProfile.course}
                             </p>
                          )}
-                         {userProfile.turma && userProfile.role === 'student' && ( // Show turma only for students
+                         {userProfile.turma && userProfile.role === 'student' && ( 
                             <p className="text-xs leading-none text-muted-foreground">
                                 Turma: {userProfile.turma}
                             </p>
@@ -310,6 +317,15 @@ export default function DashboardLayout({
                       </div>
                    </DropdownMenuLabel>
                    <DropdownMenuSeparator />
+                   {/* Placeholder for Profile Link if needed
+                   <DropdownMenuItem asChild>
+                     <Link href="/dashboard/profile">
+                       <User className="mr-2 h-4 w-4" />
+                       <span>Perfil</span>
+                     </Link>
+                   </DropdownMenuItem>
+                   <DropdownMenuSeparator />
+                   */}
                    <DropdownMenuItem onClick={handleLogout}>
                       <LogOut className="mr-2 h-4 w-4" />
                       <span>Sair</span>

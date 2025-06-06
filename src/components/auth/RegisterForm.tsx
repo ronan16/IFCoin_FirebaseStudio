@@ -17,33 +17,41 @@ import {
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2 } from "lucide-react";
-import { auth, db, serverTimestamp } from "@/lib/firebase/firebase"; // Import db and serverTimestamp
+import { Loader2, UploadCloud } from "lucide-react";
+import { auth, db, storage, serverTimestamp } from "@/lib/firebase/firebase";
 import { createUserWithEmailAndPassword } from "firebase/auth";
-import { doc, setDoc } from "firebase/firestore"; // Import doc and setDoc
+import { doc, setDoc } from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { useRouter } from "next/navigation";
+import Image from 'next/image';
 
 const coursesList = ["Informática", "Eletrotécnica", "Agroecologia", "Agropecuária", "Sistemas de Informação", "Eng. Agronômica", "Física"];
-// Example Turmas - In a real app, these might be dynamic or more structured
 const turmasList = ["1A", "1B", "2A", "2B", "3A", "3B", "4A", "4B", "TEC1", "TEC2"];
+
+const MAX_AVATAR_SIZE_MB = 2;
+const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
 
 const formSchema = z.object({
   name: z.string().min(3, { message: "O nome deve ter pelo menos 3 caracteres." }),
   ra: z.string().regex(/^[a-zA-Z0-9]+$/, { message: "RA deve conter apenas letras e números." }).min(5, { message: "RA deve ter pelo menos 5 caracteres." }),
   email: z.string().email({ message: "Por favor, insira um email válido." }),
   course: z.string().min(1, { message: "Selecione um curso." }),
-  turma: z.string().min(1, { message: "Selecione uma turma." }), // Added Turma
+  turma: z.string().min(1, { message: "Selecione uma turma." }),
   password: z.string().min(6, { message: "A senha deve ter pelo menos 6 caracteres." }),
   confirmPassword: z.string().min(6, { message: "A confirmação de senha deve ter pelo menos 6 caracteres." }),
+  avatar: z.instanceof(File).optional()
+    .refine(file => !file || file.size <= MAX_AVATAR_SIZE_MB * 1024 * 1024, `Tamanho máximo de ${MAX_AVATAR_SIZE_MB}MB.`)
+    .refine(file => !file || ACCEPTED_IMAGE_TYPES.includes(file.type), "Apenas .jpg, .jpeg, .png, .webp."),
 }).refine((data) => data.password === data.confirmPassword, {
   message: "As senhas não coincidem.",
-  path: ["confirmPassword"], // path to field that will display the error
+  path: ["confirmPassword"],
 });
 
 export function RegisterForm() {
   const { toast } = useToast();
   const router = useRouter();
   const [isLoading, setIsLoading] = React.useState(false);
+  const [avatarPreview, setAvatarPreview] = React.useState<string | null>(null);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -52,32 +60,54 @@ export function RegisterForm() {
       ra: "",
       email: "",
       course: "",
-      turma: "", // Added Turma
+      turma: "",
       password: "",
       confirmPassword: "",
+      avatar: undefined,
     },
   });
 
+  const handleAvatarChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      form.setValue("avatar", file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setAvatarPreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    } else {
+      form.setValue("avatar", undefined);
+      setAvatarPreview(null);
+    }
+  };
+
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsLoading(true);
-    console.log("Registration Submitted:", values);
 
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
       const user = userCredential.user;
 
-      // Store additional user info in Firestore
+      let avatarUrl = "";
+      if (values.avatar) {
+        const avatarRef = ref(storage, `user_avatars/${user.uid}/${values.avatar.name}`);
+        await uploadBytes(avatarRef, values.avatar);
+        avatarUrl = await getDownloadURL(avatarRef);
+      }
+
       await setDoc(doc(db, "users", user.uid), {
         uid: user.uid,
         name: values.name,
         ra: values.ra,
         email: values.email,
         course: values.course,
-        turma: values.turma, // Added Turma
-        role: "student", // Default role
+        turma: values.turma,
+        role: "student",
         createdAt: serverTimestamp(),
-        coins: 0, // Initial coins
-        cardsCollected: 0, // Initial cards
+        coins: 0,
+        cardsCollected: 0,
+        avatarUrl: avatarUrl,
       });
 
       toast({
@@ -85,7 +115,7 @@ export function RegisterForm() {
         description: "Você já pode fazer login.",
         variant: "default",
       });
-      router.push("/"); // Redirect to login page
+      router.push("/");
 
     } catch (error: any) {
       console.error("Registration failed:", error);
@@ -116,6 +146,34 @@ export function RegisterForm() {
               <FormLabel>Nome Completo</FormLabel>
               <FormControl>
                 <Input placeholder="Seu nome completo" {...field} disabled={isLoading} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+         <FormField
+          control={form.control}
+          name="avatar"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Foto de Perfil (Opcional)</FormLabel>
+              <FormControl>
+                <div className="flex items-center gap-4">
+                  {avatarPreview ? (
+                    <Image src={avatarPreview} alt="Prévia do Avatar" width={64} height={64} className="rounded-full object-cover h-16 w-16" />
+                  ) : (
+                    <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center text-muted-foreground">
+                      <UploadCloud size={32} />
+                    </div>
+                  )}
+                  <Input 
+                    type="file" 
+                    accept="image/*" 
+                    onChange={handleAvatarChange} 
+                    disabled={isLoading}
+                    className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
+                  />
+                </div>
               </FormControl>
               <FormMessage />
             </FormItem>
