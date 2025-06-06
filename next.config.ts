@@ -28,6 +28,12 @@ const nextConfig: NextConfig = {
         hostname: 'avatar.vercel.sh',
         port: '',
         pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'image.shutterstock.com', // Added this line
+        port: '',
+        pathname: '/**',
       }
     ],
   },
