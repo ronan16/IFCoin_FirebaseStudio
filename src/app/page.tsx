@@ -16,7 +16,7 @@ export default function LoginPage() {
                 <text x="50" y="60" fontSize="30" fill="hsl(var(--primary-foreground))" textAnchor="middle" fontWeight="bold">IF</text>
             </svg>
           </div>
-          <CardTitle className="text-2xl font-bold text-primary">IFCoins Digital</CardTitle>
+          <CardTitle className="text-2xl font-bold text-primary">IFCoins Digital - IFPR</CardTitle>
           <CardDescription>Faça login para acessar o sistema</CardDescription>
         </CardHeader>
         <CardContent>
